@@ -1,0 +1,5 @@
+run_id,scenario_id,config_id,sequence_id,target_tps,started_at,duration
+run-001,checkout,cfg-rc528,0,300,2026-06-20T09:00:00Z,30m
+run-002,checkout,cfg-rc528,0,450,2026-06-20T10:00:00Z,30m
+run-003,checkout,cfg-rc540,0,600,2026-06-21T09:00:00Z,30m
+run-004,checkout,cfg-rc540,0,600,2026-06-21T10:00:00Z,30m

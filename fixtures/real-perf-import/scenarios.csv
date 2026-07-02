@@ -1,0 +1,7 @@
+﻿"scenario_id","name"
+"choreography","Coreografia"
+"parallel_command","Parallel Command"
+"rwro_consistent","RW/RO Consistent"
+"rwro_none","RW/RO CacheNone"
+"rwro_optimized_heap","RW/RO Optimized Heap"
+"rwro_optimized_kvs","RW/RO Optimized KVS"

@@ -1,0 +1,20 @@
+schemaVersion: 1
+metrics:
+  latency:
+    unit: ms
+    description: "Request latency."
+  throughput:
+    unit: tps
+    description: "Throughput."
+  error_rate:
+    unit: percent
+    description: "Error rate."
+  cpu:
+    unit: mCPU
+    description: "CPU usage."
+  memory:
+    unit: MB
+    description: "Memory usage."
+  throttling:
+    unit: percent
+    description: "CPU throttling."

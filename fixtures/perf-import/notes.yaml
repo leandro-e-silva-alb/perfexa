@@ -1,0 +1,12 @@
+schemaVersion: 1
+runs:
+  - run_id: run-003
+    body: Candidate reached target TPS but showed sustained Kafka throttling.
+    author: perf-team
+    updated_at: 2026-06-21T12:00:00Z
+comparisons:
+  - baseline_run_id: run-002
+    candidate_run_id: run-004
+    conclusion: Candidate holds higher throughput with acceptable latency; keep monitoring Kafka headroom.
+    author: perf-team
+    updated_at: 2026-06-21T12:15:00Z

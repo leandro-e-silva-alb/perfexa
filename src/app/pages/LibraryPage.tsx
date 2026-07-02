@@ -1,0 +1,142 @@
+import { SlidersHorizontal } from "lucide-react";
+import { useMemo, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { DataTable } from "../../components/DataTable";
+import { StatusPill } from "../../components/StatusPill";
+import { buildRunSummaries, formatDateTime, scenarioName } from "../../domain/selectors";
+import type { ImportedPackage } from "../../domain/types";
+import { useAppState } from "../AppState";
+
+interface LibraryRow {
+  id: string;
+  name: string;
+  importedAt: string;
+  sourcePath: string;
+  scenarios: string;
+  tests: number;
+  runs: number;
+  targetTps: string;
+  versions: string;
+  saturatedRuns: number;
+  package: ImportedPackage;
+}
+
+function toLibraryRow(pkg: ImportedPackage): LibraryRow {
+  const summaries = buildRunSummaries(pkg);
+  const scenarios = [...new Set(pkg.tests.map((test) => scenarioName(pkg, test.scenario_id)))].join(", ");
+  const tpsValues = pkg.runs.map((run) => run.target_tps);
+  const versions = [...new Set(pkg.configs.map((config) => config.exagon_ver))].join(", ");
+  const saturatedRuns = summaries.filter((summary) => summary.saturation.saturated).length;
+
+  return {
+    id: pkg.id,
+    name: pkg.name,
+    importedAt: pkg.importedAt,
+    sourcePath: pkg.sourcePath ?? "-",
+    scenarios,
+    tests: pkg.tests.length,
+    runs: pkg.runs.length,
+    targetTps: `${Math.min(...tpsValues)}-${Math.max(...tpsValues)}`,
+    versions,
+    saturatedRuns,
+    package: pkg
+  };
+}
+
+export function LibraryPage() {
+  const { packages, selectPackage, setView } = useAppState();
+  const [scenarioFilter, setScenarioFilter] = useState("all");
+  const [saturationFilter, setSaturationFilter] = useState("all");
+
+  const scenarios = useMemo(
+    () => ["all", ...new Set(packages.flatMap((pkg) => pkg.scenarios.map((scenario) => scenario.name)))],
+    [packages]
+  );
+
+  const rows = useMemo(() => {
+    return packages
+      .map(toLibraryRow)
+      .filter((row) => scenarioFilter === "all" || row.scenarios.includes(scenarioFilter))
+      .filter((row) => {
+        if (saturationFilter === "saturated") return row.saturatedRuns > 0;
+        if (saturationFilter === "clean") return row.saturatedRuns === 0;
+        return true;
+      });
+  }, [packages, saturationFilter, scenarioFilter]);
+
+  const columns: ColumnDef<LibraryRow>[] = [
+    { header: "Package", accessorKey: "name" },
+    { header: "Scenarios", accessorKey: "scenarios" },
+    { header: "Tests", accessorKey: "tests" },
+    { header: "Runs", accessorKey: "runs" },
+    { header: "Target TPS", accessorKey: "targetTps" },
+    { header: "Versions", accessorKey: "versions" },
+    {
+      header: "Saturation",
+      cell: ({ row }) =>
+        row.original.saturatedRuns > 0 ? (
+          <StatusPill tone="warn">{row.original.saturatedRuns} saturated</StatusPill>
+        ) : (
+          <StatusPill tone="ok">clean</StatusPill>
+        )
+    },
+    {
+      header: "Imported",
+      cell: ({ row }) => formatDateTime(row.original.importedAt)
+    },
+    {
+      header: "",
+      id: "action",
+      cell: ({ row }) => (
+        <button className="button button-small" type="button" onClick={() => selectPackage(row.original.id)}>
+          Open
+        </button>
+      )
+    }
+  ];
+
+  return (
+    <div className="page-stack">
+      <header className="page-header">
+        <div>
+          <p className="eyebrow">Library</p>
+          <h1>Imported test packages</h1>
+        </div>
+        <button className="button button-primary" type="button" onClick={() => setView("import")}>
+          Import package
+        </button>
+      </header>
+
+      <section className="panel filter-row">
+        <SlidersHorizontal size={18} />
+        <label>
+          Scenario
+          <select value={scenarioFilter} onChange={(event) => setScenarioFilter(event.target.value)}>
+            {scenarios.map((scenario) => (
+              <option key={scenario} value={scenario}>
+                {scenario}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Saturation
+          <select value={saturationFilter} onChange={(event) => setSaturationFilter(event.target.value)}>
+            <option value="all">all</option>
+            <option value="saturated">saturated</option>
+            <option value="clean">clean</option>
+          </select>
+        </label>
+      </section>
+
+      <section className="panel">
+        <DataTable
+          data={rows}
+          columns={columns}
+          searchPlaceholder="Search packages, versions, scenarios"
+          emptyLabel="No imported packages"
+        />
+      </section>
+    </div>
+  );
+}

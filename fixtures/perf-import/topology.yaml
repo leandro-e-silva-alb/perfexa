@@ -1,0 +1,50 @@
+schemaVersion: 1
+groups:
+  im:
+    members: [im-0]
+    aggregations:
+      cpu: sum
+      memory: sum
+      throttling: avg
+  kafka:
+    members: [kafka-0, kafka-1, kafka-2]
+    aggregations:
+      cpu: sum
+      memory: sum
+      throttling: avg
+  orch-a:
+    members: [orch-a-0]
+    aggregations:
+      cpu: sum
+      memory: sum
+      throttling: avg
+  part-b:
+    members: [part-b-0]
+    aggregations:
+      cpu: sum
+      memory: sum
+      throttling: avg
+  part-c:
+    members: [part-c-0]
+    aggregations:
+      cpu: sum
+      memory: sum
+      throttling: avg
+  rf:
+    members: [rf-0]
+    aggregations:
+      cpu: sum
+      memory: sum
+      throttling: avg
+  mongo:
+    members: [mongo-a-0]
+    aggregations:
+      cpu: sum
+      memory: sum
+      throttling: avg
+  redis:
+    members: [redis-0]
+    aggregations:
+      cpu: sum
+      memory: sum
+      throttling: avg

@@ -1,0 +1,39 @@
+schemaVersion: 1
+package:
+  id: perf-import-selected
+  name: "Selected performance tests"
+  createdAt: "2026-07-01T00:00:00+01:00"
+  generatedBy: Codex
+  description: "Converted from the Excel performance workbook."
+source:
+  file: raw/source.xlsx
+components:
+  exagon:
+    label: Exagon
+    kind: application
+  usrv-a:
+    label: "uSrv A"
+    kind: service
+  usrv-b:
+    label: "uSrv B"
+    kind: service
+  usrv-c:
+    label: "uSrv C"
+    kind: service
+  im:
+    label: IM
+    kind: service
+  kafka:
+    label: Kafka
+    kind: infrastructure
+  redis:
+    label: Redis
+    kind: infrastructure
+  mongo:
+    label: MongoDB
+    kind: infrastructure
+instanceTypes:
+  run:
+    label: Run
+  pod:
+    label: Pod

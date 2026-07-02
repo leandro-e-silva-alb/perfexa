@@ -1,0 +1,8 @@
+﻿"scenario_id","config_id","sequence_id"
+"choreography","cfg-77476a3e","0"
+"parallel_command","cfg-e8c9c6d6","0"
+"rwro_consistent","cfg-672fd4a2","0"
+"rwro_none","cfg-672fd4a2","0"
+"rwro_optimized_heap","cfg-672fd4a2","0"
+"rwro_optimized_kvs","cfg-672fd4a2","0"
+

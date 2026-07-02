@@ -1,0 +1,19 @@
+﻿schemaVersion: 1
+defaults:
+  saturatedWhen:
+    - metric_id: throttling
+      stat: max
+      instance_type: pod
+      operator: ">"
+      value: 20
+overrides:
+  - run_id: "202605202011"
+    saturated: true
+    reason: "Imported from source Excel Saturated column."
+  - run_id: "202605202229"
+    saturated: true
+    reason: "Imported from source Excel Saturated column."
+  - run_id: "202605202034"
+    saturated: true
+    reason: "Imported from source Excel Saturated column."
+

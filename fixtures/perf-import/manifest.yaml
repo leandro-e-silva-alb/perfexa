@@ -1,0 +1,26 @@
+schemaVersion: 1
+components:
+  exagon:
+    label: Exagon
+    kind: application
+  usrv-a:
+    label: uSrv A
+    kind: service
+  usrv-b:
+    label: uSrv B
+    kind: service
+  usrv-c:
+    label: uSrv C
+    kind: service
+  im:
+    label: IM
+    kind: service
+  kafka:
+    label: Kafka
+    kind: infrastructure
+  redis:
+    label: Redis
+    kind: infrastructure
+  mongo:
+    label: MongoDB
+    kind: infrastructure

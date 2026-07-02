@@ -1,0 +1,23 @@
+{
+  "outputDir": "C:\\Users\\PC221\\Documents\\Codex\\2026-06-29\\vou-te-passar-um-excel-vais-2\\outputs\\perf-import-selected",
+  "runs": 66,
+  "components": 264,
+  "measurements": 2046,
+  "countsByPrefix": {
+    "parallel_command-6.3.0-523,127,67": 11,
+    "rwro_none-6.2.0-506,112,52": 11,
+    "rwro_consistent-6.2.0-506,112,52": 11,
+    "rwro_optimized_heap-6.2.0-506,112,52": 11,
+    "rwro_optimized_kvs-6.2.0-506,112,52": 11,
+    "choreography-6.3.0-528,133,73": 11
+  },
+  "countsByMetric": {
+    "throughput": 66,
+    "error_rate": 66,
+    "latency": 66,
+    "cpu": 660,
+    "memory": 660,
+    "throttling": 528
+  },
+  "saturationOverrides": 3
+}

@@ -1,0 +1,12 @@
+schemaVersion: 1
+defaults:
+  saturatedWhen:
+    - metric_id: throttling
+      stat: max
+      instance_type: pod
+      operator: ">"
+      value: 20
+overrides:
+  - run_id: run-004
+    saturated: false
+    reason: Investigated throttling spike was isolated to startup and did not affect steady-state throughput.
