@@ -1,4 +1,4 @@
-import { deriveGroupMeasurements } from "./aggregation";
+import { resolveTopologyMeasurements } from "./topologyMetrics";
 import type {
   ImportedPackage,
   MeasurementRecord,
@@ -19,7 +19,7 @@ function compare(value: number, operator: SaturationOperator, threshold: number)
 
 function describeRule(rule: SaturationRule): string {
   const instance = rule.instance_id ? ` ${rule.instance_id}` : "";
-  return `${rule.metric_id}/${rule.stat}/${rule.instance_type}${instance} ${rule.operator} ${rule.value}`;
+  return `${rule.metric_id}/${rule.stat}${instance} ${rule.operator} ${rule.value}`;
 }
 
 function matchingMeasurements(rule: SaturationRule, run: RunRecord, measurements: MeasurementRecord[]) {
@@ -28,7 +28,6 @@ function matchingMeasurements(rule: SaturationRule, run: RunRecord, measurements
       measurement.run_id === run.run_id &&
       measurement.metric_id === rule.metric_id &&
       measurement.stat === rule.stat &&
-      measurement.instance_type === rule.instance_type &&
       (!rule.instance_id || measurement.instance_id === rule.instance_id)
   );
 }
@@ -45,10 +44,7 @@ export function evaluateSaturationForRun(pkg: ImportedPackage, run: RunRecord): 
     };
   }
 
-  const measurements = [
-    ...pkg.measurements,
-    ...deriveGroupMeasurements(pkg.topology, pkg.measurements)
-  ];
+  const measurements = [...pkg.measurements, ...resolveTopologyMeasurements(pkg.topology, pkg.metrics, pkg.measurements).projected];
 
   const matchedRules = pkg.saturation.defaults.saturatedWhen.filter((rule) =>
     matchingMeasurements(rule, run, measurements).some((measurement) =>

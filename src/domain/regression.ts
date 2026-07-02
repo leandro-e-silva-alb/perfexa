@@ -1,5 +1,6 @@
 import { evaluateSaturationByRun } from "./saturation";
 import { scenarioName, testKeyFor } from "./selectors";
+import { resolveTopologyMeasurements } from "./topologyMetrics";
 import type { ImportedPackage, MeasurementRecord, RunRecord, TestRecord } from "./types";
 
 export interface RegressionPoint {
@@ -68,7 +69,7 @@ function buildEffectiveTpsByRun(measurements: MeasurementRecord[]): Map<string, 
     if (
       measurement.metric_id === "throughput" &&
       measurement.stat === "effective" &&
-      measurement.instance_type === "run" &&
+      measurement.instance_id === "" &&
       Number.isFinite(measurement.value)
     ) {
       result.set(measurement.run_id, measurement.value);
@@ -78,23 +79,22 @@ function buildEffectiveTpsByRun(measurements: MeasurementRecord[]): Map<string, 
   return result;
 }
 
-function buildCpuByRun(measurements: MeasurementRecord[]): Map<string, number> {
-  const podSums = new Map<string, number>();
-  const runValues = new Map<string, number>();
+function buildCpuByRun(pkg: ImportedPackage): Map<string, number> {
+  const topLevel = pkg.topology.levels[0];
+  if (!topLevel) {
+    return new Map();
+  }
 
-  for (const measurement of measurements) {
-    if (measurement.metric_id !== "cpu" || measurement.stat !== "avg" || !Number.isFinite(measurement.value)) {
-      continue;
-    }
+  const projectedCpu = resolveTopologyMeasurements(pkg.topology, pkg.metrics, pkg.measurements, "cpu", "avg", topLevel).projected;
+  const totals = new Map<string, number>();
 
-    if (measurement.instance_type === "pod") {
-      podSums.set(measurement.run_id, (podSums.get(measurement.run_id) ?? 0) + measurement.value);
-    } else if (measurement.instance_type === "run") {
-      runValues.set(measurement.run_id, measurement.value);
+  for (const measurement of projectedCpu) {
+    if (Number.isFinite(measurement.value)) {
+      totals.set(measurement.run_id, (totals.get(measurement.run_id) ?? 0) + measurement.value);
     }
   }
 
-  return new Map([...runValues, ...podSums]);
+  return totals;
 }
 
 function createGroup(pkg: ImportedPackage, test: TestRecord | RunRecord): RegressionGroup {
@@ -115,7 +115,7 @@ function createGroup(pkg: ImportedPackage, test: TestRecord | RunRecord): Regres
 export function buildCpuRegressionRows(pkg: ImportedPackage): CpuRegressionRow[] {
   const groups = new Map<string, RegressionGroup>();
   const effectiveTpsByRun = buildEffectiveTpsByRun(pkg.measurements);
-  const cpuByRun = buildCpuByRun(pkg.measurements);
+  const cpuByRun = buildCpuByRun(pkg);
   const saturationByRun = evaluateSaturationByRun(pkg);
 
   for (const test of pkg.tests) {

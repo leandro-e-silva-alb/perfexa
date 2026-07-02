@@ -14,7 +14,7 @@ import {
 import type { ImportedPackage } from "../../domain/types";
 import { useAppState } from "../AppState";
 
-type Scope = "run" | "pod" | "group";
+type Scope = string;
 type ChartMode = "line" | "stackedArea";
 type ChartDatum = [number, number, string];
 type StackedAreaDatum = { value: number; runIds: string };
@@ -33,10 +33,10 @@ type MetricConfig = {
   label: string;
   defaultStat: string;
   fallbackStats?: string[];
-  scopes: Scope[];
+  scopeType: "run" | "topology";
 };
 
-const MAX_POD_TOOLTIP_ITEMS = 8;
+const MAX_TOPOLOGY_TOOLTIP_ITEMS = 8;
 
 function niceAxisMax(value: number): number | undefined {
   if (!Number.isFinite(value) || value <= 0) return undefined;
@@ -80,19 +80,27 @@ function availableStatsForMetric(
 }
 
 const metricConfigs: MetricConfig[] = [
-  { id: "latency", label: "Latency", defaultStat: "p95", fallbackStats: ["avg"], scopes: ["run"] },
-  { id: "error_rate", label: "Errors", defaultStat: "avg", scopes: ["run"] },
-  { id: "cpu", label: "CPU", defaultStat: "avg", scopes: ["pod", "group"] },
-  { id: "memory", label: "Memory", defaultStat: "avg", scopes: ["pod", "group"] },
-  { id: "throttling", label: "Throttling", defaultStat: "max", scopes: ["pod", "group"] }
+  { id: "latency", label: "Latency", defaultStat: "p95", fallbackStats: ["avg"], scopeType: "run" },
+  { id: "error_rate", label: "Errors", defaultStat: "avg", scopeType: "run" },
+  { id: "cpu", label: "CPU", defaultStat: "avg", scopeType: "topology" },
+  { id: "memory", label: "Memory", defaultStat: "avg", scopeType: "topology" },
+  { id: "throttling", label: "Throttling", defaultStat: "max", scopeType: "topology" }
 ];
+
+function scopeOptionsForMetric(metric: MetricConfig, pkg: ImportedPackage | null | undefined): string[] {
+  if (metric.scopeType === "run") {
+    return ["run"];
+  }
+
+  return pkg?.topology.levels ?? [];
+}
 
 export function MetricsExplorerPage() {
   const { activePackage, setView } = useAppState();
   const [metricId, setMetricId] = useState("latency");
   const config = metricConfigs.find((item) => item.id === metricId) ?? metricConfigs[0];
   const [stat, setStat] = useState(config.defaultStat);
-  const [scope, setScope] = useState<Scope>(config.scopes[0]);
+  const [scope, setScope] = useState<Scope>("run");
   const [selectedTestKey, setSelectedTestKey] = useState("");
   const [chartMode, setChartMode] = useState<ChartMode>("line");
   const [legendSelected, setLegendSelected] = useState<Record<string, boolean>>({});
@@ -137,15 +145,18 @@ export function MetricsExplorerPage() {
   }, [metricId, scope, selectedTestKey, stat]);
 
   const scopeOptions = useMemo(() => {
-    if (!activePackage) return config.scopes;
-    return config.scopes.filter(
-      (item) => item !== "group" || Object.keys(activePackage.topology.groups).length > 0
-    );
-  }, [activePackage, config.scopes]);
+    return scopeOptionsForMetric(config, activePackage);
+  }, [activePackage, config]);
+
+  useEffect(() => {
+    if (!scopeOptions.includes(scope)) {
+      setScope(scopeOptions[0] ?? "run");
+    }
+  }, [scope, scopeOptions]);
 
   const rows = useMemo(() => {
     if (!activePackage || !selectedTestKey) return [];
-    return measurementsForScope(activePackage, metricId, stat, scope).filter(
+    return measurementsForScope(activePackage, metricId, stat, scope, selectedTestKey).filter(
       (row) => row.test_key === selectedTestKey
     );
   }, [activePackage, metricId, scope, selectedTestKey, stat]);
@@ -162,9 +173,10 @@ export function MetricsExplorerPage() {
 
   const selectMetric = (metric: MetricConfig) => {
     const nextStats = availableStatsForMetric(activePackage, selectedRunIds, metric);
+    const nextScopes = scopeOptionsForMetric(metric, activePackage);
     setMetricId(metric.id);
     setStat(nextStats[0] ?? metric.defaultStat);
-    setScope(metric.scopes[0]);
+    setScope(nextScopes[0] ?? "run");
     setLegendSelected({});
     if (!["cpu", "memory"].includes(metric.id)) {
       setChartMode("line");
@@ -184,7 +196,7 @@ export function MetricsExplorerPage() {
 
   const unit = metricUnit(activePackage, metricId);
   const selectedTestLabel = testOptions.find((test) => test.key === selectedTestKey)?.label ?? "No test selected";
-  const seriesNames = [...new Set(rows.map((row) => row.instance_id || row.instance_type))].sort((a, b) =>
+  const seriesNames = [...new Set(rows.map((row) => row.instance_id || row.scope))].sort((a, b) =>
     a.localeCompare(b, undefined, { numeric: true })
   );
   const normalizedLegendSelected = Object.fromEntries(
@@ -196,7 +208,7 @@ export function MetricsExplorerPage() {
   const firstEffectiveTps = effectiveTpsValues[0];
   const lastEffectiveTps = effectiveTpsValues[effectiveTpsValues.length - 1];
   const valuesBySeriesAndTps = rows.reduce((seriesMap, row) => {
-    const seriesName = row.instance_id || row.instance_type;
+    const seriesName = row.instance_id || row.scope;
     const tpsMap = seriesMap.get(seriesName) ?? new Map<number, { total: number; count: number; runIds: string[] }>();
     const bucket = tpsMap.get(row.effective_tps) ?? { total: 0, count: 0, runIds: [] };
     bucket.total += row.value;
@@ -215,8 +227,9 @@ export function MetricsExplorerPage() {
   const stackedYAxisMax = niceAxisMax(Math.max(0, ...stackedTotalsByTps) * 1.08);
   const chartSeries = seriesNames.map((name) => {
     const seriesRows = rows
-      .filter((row) => (row.instance_id || row.instance_type) === name)
+      .filter((row) => (row.instance_id || row.scope) === name)
       .sort((a, b) => a.effective_tps - b.effective_tps || a.run_id.localeCompare(b.run_id));
+    const isDerivedSeries = seriesRows.length > 0 && seriesRows.every((row) => row.source === "derived");
     const data =
       effectiveChartMode === "stackedArea"
         ? effectiveTpsValues.map((effectiveTps): ChartDatum => {
@@ -239,6 +252,7 @@ export function MetricsExplorerPage() {
           : undefined,
       stack: effectiveChartMode === "stackedArea" ? "total" : undefined,
       areaStyle: effectiveChartMode === "stackedArea" ? { opacity: 0.86 } : undefined,
+      lineStyle: isDerivedSeries ? { type: "dashed" } : undefined,
       emphasis: { focus: "series" },
       showSymbol: effectiveChartMode === "line",
       symbolSize: 7,
@@ -256,9 +270,9 @@ export function MetricsExplorerPage() {
       (Array.isArray(items[0]?.data) ? items[0].data[0] : "-");
     const formatTooltipRows = (tooltipItems: TooltipParam[], includeTotal: boolean) => {
       const sortedItems = [...tooltipItems].sort((a, b) => tooltipValue(b) - tooltipValue(a));
-      const isCompact = scope === "pod" && sortedItems.length > MAX_POD_TOOLTIP_ITEMS;
-      const shownItems = isCompact ? sortedItems.slice(0, MAX_POD_TOOLTIP_ITEMS) : sortedItems;
-      const hiddenItems = isCompact ? sortedItems.slice(MAX_POD_TOOLTIP_ITEMS) : [];
+      const isCompact = config.scopeType === "topology" && sortedItems.length > MAX_TOPOLOGY_TOOLTIP_ITEMS;
+      const shownItems = isCompact ? sortedItems.slice(0, MAX_TOPOLOGY_TOOLTIP_ITEMS) : sortedItems;
+      const hiddenItems = isCompact ? sortedItems.slice(MAX_TOPOLOGY_TOOLTIP_ITEMS) : [];
       const total = sortedItems.reduce((sum, item) => sum + tooltipValue(item), 0);
       const lines = shownItems.map(
         (item) => `${item.marker ?? ""}${item.seriesName}: ${formatNumber(tooltipValue(item), 2)} ${unit}`
@@ -365,7 +379,7 @@ export function MetricsExplorerPage() {
     { header: "Effective TPS", accessorKey: "effective_tps" },
     { header: "Metric", accessorKey: "metric_id" },
     { header: "Stat", accessorKey: "stat" },
-    { header: "Scope", accessorKey: "instance_type" },
+    { header: "Scope", accessorKey: "scope" },
     { header: "Instance", accessorKey: "instance_id" },
     {
       header: "Value",
@@ -417,18 +431,16 @@ export function MetricsExplorerPage() {
             ))}
           </select>
         </label>
-        <div className="segmented">
-          {scopeOptions.map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={item === scope ? "selected" : ""}
-              onClick={() => setScope(item)}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
+        <label>
+          {config.scopeType === "topology" ? "Topology level" : "Scope"}
+          <select value={scope} onChange={(event) => setScope(event.target.value)}>
+            {scopeOptions.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </label>
         {canUseStackedArea ? (
           <div className="chart-mode-control">
             <span>Chart</span>

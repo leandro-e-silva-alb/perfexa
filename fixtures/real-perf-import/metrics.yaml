@@ -1,20 +1,25 @@
-schemaVersion: 1
 metrics:
   latency:
+    aggregation: max
     unit: ms
-    description: "Request latency."
+    description: Request latency.
   throughput:
+    aggregation: sum
     unit: tps
-    description: "Throughput."
+    description: Throughput.
   error_rate:
+    aggregation: max
     unit: percent
-    description: "Error rate."
+    description: Error rate.
   cpu:
+    aggregation: sum
     unit: mCPU
-    description: "CPU usage."
+    description: CPU usage.
   memory:
+    aggregation: sum
     unit: MB
-    description: "Memory usage."
+    description: Memory usage.
   throttling:
+    aggregation: max
     unit: percent
-    description: "CPU throttling."
+    description: CPU throttling.

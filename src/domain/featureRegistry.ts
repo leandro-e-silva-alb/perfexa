@@ -12,9 +12,9 @@ export const featureRegistry: AppFeature[] = [
     label: "Overview table",
     description: "Operational run summary with TPS, latency, errors, versions, and saturation.",
     requirements: [
-      { metric_id: "throughput", stat: "effective", instance_type: "run", label: "Effective TPS" },
-      { metric_id: "latency", stat: "p95", instance_type: "run", label: "Latency p95" },
-      { metric_id: "error_rate", stat: "avg", instance_type: "run", label: "Error rate avg" }
+      { metric_id: "throughput", stat: "effective", instance_id: "", label: "Effective TPS" },
+      { metric_id: "latency", stat: "p95", instance_id: "", label: "Latency p95" },
+      { metric_id: "error_rate", stat: "avg", instance_id: "", label: "Error rate avg" }
     ]
   },
   {
@@ -22,19 +22,28 @@ export const featureRegistry: AppFeature[] = [
     label: "Run charts",
     description: "Run-level charts over target TPS for throughput, latency, and errors.",
     requirements: [
-      { metric_id: "throughput", stat: "effective", instance_type: "run", label: "Effective TPS" },
-      { metric_id: "latency", stat: "p95", instance_type: "run", label: "Latency p95" },
-      { metric_id: "error_rate", stat: "avg", instance_type: "run", label: "Error rate avg" }
+      { metric_id: "throughput", stat: "effective", instance_id: "", label: "Effective TPS" },
+      { metric_id: "latency", stat: "p95", instance_id: "", label: "Latency p95" },
+      { metric_id: "error_rate", stat: "avg", instance_id: "", label: "Error rate avg" }
     ]
   },
   {
     id: "pod_resources",
-    label: "Pod resources",
-    description: "Pod-level CPU, memory, and throttling measurements.",
+    label: "Node resources",
+    description: "Topology-attached CPU, memory, and throttling measurements.",
     requirements: [
-      { metric_id: "cpu", stat: "avg", instance_type: "pod", label: "CPU avg by pod" },
-      { metric_id: "memory", stat: "avg", instance_type: "pod", label: "Memory avg by pod" },
-      { metric_id: "throttling", stat: "max", instance_type: "pod", label: "Throttling max by pod" }
+      { metric_id: "cpu", stat: "avg", label: "CPU avg by node" },
+      { metric_id: "memory", stat: "avg", label: "Memory avg by node" },
+      { metric_id: "throttling", stat: "max", label: "Throttling max by node" }
+    ]
+  },
+  {
+    id: "regression",
+    label: "Regression table",
+    description: "CPU-over-TPS regression by test.",
+    requirements: [
+      { metric_id: "throughput", stat: "effective", instance_id: "", label: "Effective TPS" },
+      { metric_id: "cpu", stat: "avg", label: "CPU avg by topology node" }
     ]
   },
   {
@@ -42,13 +51,13 @@ export const featureRegistry: AppFeature[] = [
     label: "Saturation evaluation",
     description: "Rule-based saturation checks and explicit overrides.",
     requirements: [
-      { metric_id: "throttling", stat: "max", instance_type: "pod", label: "Throttling max by pod" }
+      { metric_id: "throttling", stat: "max", label: "Throttling max by node" }
     ]
   }
 ];
 
 export function requirementKey(requirement: FeatureRequirement): string {
-  return `${requirement.metric_id}/${requirement.stat}/${requirement.instance_type}`;
+  return `${requirement.metric_id}/${requirement.stat}/${requirement.instance_id ?? "*"}`;
 }
 
 export function evaluateFeatureAvailability(
@@ -67,7 +76,7 @@ export function evaluateFeatureAvailability(
             measurement.run_id === run.run_id &&
             measurement.metric_id === requirement.metric_id &&
             measurement.stat === requirement.stat &&
-            measurement.instance_type === requirement.instance_type
+            (requirement.instance_id === undefined || measurement.instance_id === requirement.instance_id)
         )
       );
 

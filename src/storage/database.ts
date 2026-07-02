@@ -1,4 +1,11 @@
-import type { ConfigRecord, ImportedPackage, NotesDocument, RunRecord, TestRecord } from "../domain/types";
+import type {
+  ImportedPackage,
+  MetricAggregation,
+  MetricsDocument,
+  NotesDocument,
+  SaturationDocument,
+  TopologyDocument
+} from "../domain/types";
 
 interface SqlDatabase {
   execute(query: string, bindValues?: unknown[]): Promise<unknown>;
@@ -15,41 +22,72 @@ export interface PerfexaStorage {
 
 const LOCAL_STORAGE_KEY = "perfexa.importedPackages.v1";
 
-type LegacyComponent = {
-  run_id: string;
-  component_id: string;
-  version: string;
-};
+const METRIC_AGGREGATIONS: MetricAggregation[] = ["sum", "average", "ratio", "percentage", "max"];
 
-type LegacyRun = Partial<RunRecord> & {
-  run_id: string;
-  test_id?: string;
-  scenario?: string;
-  short_name?: string;
-  scenario_id?: string;
-  config_id?: string;
-  sequence_id?: number;
-  exagon_ver?: string;
-  target_tps: number;
-  started_at: string;
-  duration: string;
-};
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
-type LegacyTest = Partial<TestRecord> & {
-  test_id?: string;
-  scenario_id: string;
-  config_id?: string;
-  sequence_id?: number;
-  exagon_ver?: string;
-  components_ver?: string;
-};
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
 
-type LegacyPackage = Omit<ImportedPackage, "runs" | "tests" | "configs" | "components"> & {
-  tests?: LegacyTest[];
-  configs?: ConfigRecord[];
-  components?: LegacyComponent[];
-  runs: LegacyRun[];
-};
+function isMetricAggregation(value: unknown): value is MetricAggregation {
+  return METRIC_AGGREGATIONS.includes(value as MetricAggregation);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(isString);
+}
+
+function hasCurrentMetrics(value: unknown): value is MetricsDocument {
+  if (!isRecord(value) || !isRecord(value.metrics)) return false;
+  return Object.values(value.metrics).every(
+    (definition) => isRecord(definition) && isMetricAggregation(definition.aggregation)
+  );
+}
+
+function hasCurrentTopology(value: unknown): value is TopologyDocument {
+  if (!isRecord(value) || "groups" in value) return false;
+  if (!isStringArray(value.levels) || value.levels.length === 0) return false;
+  if (!isRecord(value.topology) || !isRecord(value.standalone)) return false;
+
+  for (const parentMap of Object.values(value.topology)) {
+    if (!isRecord(parentMap)) return false;
+    if (!Object.values(parentMap).every(isStringArray)) return false;
+  }
+  for (const nodes of Object.values(value.standalone)) {
+    if (!isStringArray(nodes)) return false;
+  }
+
+  return true;
+}
+
+function hasCurrentMeasurements(value: unknown): boolean {
+  return Array.isArray(value) && value.every((measurement) => {
+    if (!isRecord(measurement) || "instance_type" in measurement) return false;
+    return (
+      isString(measurement.run_id) &&
+      isString(measurement.metric_id) &&
+      isString(measurement.stat) &&
+      isString(measurement.instance_id) &&
+      isFiniteNumber(measurement.value)
+    );
+  });
+}
+
+function hasCurrentSaturation(value: unknown): value is SaturationDocument {
+  if (!isRecord(value) || !isRecord(value.defaults) || !Array.isArray(value.defaults.saturatedWhen)) return false;
+
+  return value.defaults.saturatedWhen.every((rule) => {
+    if (!isRecord(rule) || "instance_type" in rule) return false;
+    return isString(rule.metric_id) && isString(rule.stat) && isFiniteNumber(rule.value);
+  });
+}
 
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
@@ -59,131 +97,30 @@ function sortPackages(packages: ImportedPackage[]): ImportedPackage[] {
   return [...packages].sort((a, b) => b.importedAt.localeCompare(a.importedAt));
 }
 
-function testIdForLegacyRun(run: LegacyRun): string {
-  return run.test_id ?? run.short_name ?? run.scenario_id ?? run.scenario ?? run.run_id;
+export function isCurrentPackage(value: unknown): value is ImportedPackage {
+  if (!isRecord(value)) return false;
+  return (
+    isString(value.id) &&
+    isString(value.name) &&
+    isString(value.importedAt) &&
+    Array.isArray(value.scenarios) &&
+    Array.isArray(value.configs) &&
+    Array.isArray(value.tests) &&
+    Array.isArray(value.runs) &&
+    hasCurrentMetrics(value.metrics) &&
+    hasCurrentTopology(value.topology) &&
+    hasCurrentSaturation(value.saturation) &&
+    hasCurrentMeasurements(value.measurements)
+  );
 }
 
-function componentsVerForRun(components: LegacyComponent[] | undefined, runId: string): string {
-  if (!components) return "";
-  return components
-    .filter((component) => component.run_id === runId && component.component_id !== "exagon")
-    .map((component) => `${component.component_id}:${component.version}`)
-    .join(",");
-}
-
-function legacyConfigIdForTest(test: LegacyTest): string {
-  return test.config_id ?? test.test_id ?? test.scenario_id;
-}
-
-function legacyTestIdForTest(test: LegacyTest): string {
-  return test.test_id ?? `${test.scenario_id}|${legacyConfigIdForTest(test)}|${test.sequence_id ?? 0}`;
-}
-
-function normalizePackage(raw: ImportedPackage): ImportedPackage {
-  const legacy = raw as unknown as LegacyPackage;
-  const legacyTests = legacy.tests ?? [];
-  const sequenceByScenarioConfig = new Map<string, number>();
-  const oldTestIdToTest = new Map<string, TestRecord>();
-  const configsById = new Map<string, ConfigRecord>();
-
-  for (const config of legacy.configs ?? []) {
-    configsById.set(config.config_id, config);
+function parseStoredPackage(json: string): ImportedPackage | undefined {
+  try {
+    const parsed = JSON.parse(json);
+    return isCurrentPackage(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
   }
-
-  const tests: TestRecord[] =
-    legacyTests.length > 0
-      ? legacyTests.map((test) => {
-          const configId = legacyConfigIdForTest(test);
-          const counterKey = `${test.scenario_id}|${configId}`;
-          const sequenceId =
-            typeof test.sequence_id === "number"
-              ? test.sequence_id
-              : sequenceByScenarioConfig.get(counterKey) ?? 0;
-          sequenceByScenarioConfig.set(counterKey, Math.max(sequenceByScenarioConfig.get(counterKey) ?? 0, sequenceId + 1));
-
-          if (!configsById.has(configId)) {
-            configsById.set(configId, {
-              config_id: configId,
-              exagon_ver: test.exagon_ver ?? "",
-              components_ver: test.components_ver ?? ""
-            });
-          }
-
-          const normalized = {
-            scenario_id: test.scenario_id,
-            config_id: configId,
-            sequence_id: sequenceId
-          };
-          oldTestIdToTest.set(legacyTestIdForTest(test), normalized);
-          return normalized;
-        })
-      : [];
-
-  if (tests.length === 0) {
-    for (const run of legacy.runs) {
-      const oldTestId = testIdForLegacyRun(run);
-      const scenarioId = run.scenario_id ?? run.short_name ?? run.scenario ?? oldTestId;
-      const configId = run.config_id ?? oldTestId;
-      const counterKey = `${scenarioId}|${configId}`;
-      const sequenceId =
-        typeof run.sequence_id === "number" ? run.sequence_id : sequenceByScenarioConfig.get(counterKey) ?? 0;
-      const normalized = {
-        scenario_id: scenarioId,
-        config_id: configId,
-        sequence_id: sequenceId
-      };
-
-      if (!oldTestIdToTest.has(oldTestId)) {
-        sequenceByScenarioConfig.set(counterKey, sequenceId + 1);
-        oldTestIdToTest.set(oldTestId, normalized);
-        tests.push(normalized);
-      }
-
-      if (!configsById.has(configId)) {
-        configsById.set(configId, {
-          config_id: configId,
-          exagon_ver: run.exagon_ver ?? "",
-          components_ver: componentsVerForRun(legacy.components, run.run_id)
-        });
-      }
-    }
-  }
-
-  const scenarios =
-    legacy.scenarios && legacy.scenarios.length > 0
-      ? legacy.scenarios
-      : [
-          ...new Map(
-            tests.map((test) => [
-              test.scenario_id,
-              {
-                scenario_id: test.scenario_id,
-                name:
-                  legacy.runs.find((run) => oldTestIdToTest.get(testIdForLegacyRun(run))?.scenario_id === test.scenario_id)
-                    ?.scenario ??
-                  test.scenario_id
-              }
-            ])
-          ).values()
-        ];
-
-  return {
-    ...raw,
-    scenarios,
-    configs: [...configsById.values()],
-    tests,
-    runs: legacy.runs.map((run) => ({
-      ...(oldTestIdToTest.get(testIdForLegacyRun(run)) ?? {
-        scenario_id: run.scenario_id ?? run.short_name ?? run.scenario ?? testIdForLegacyRun(run),
-        config_id: run.config_id ?? testIdForLegacyRun(run),
-        sequence_id: run.sequence_id ?? 0
-      }),
-      run_id: run.run_id,
-      target_tps: run.target_tps,
-      started_at: run.started_at,
-      duration: run.duration
-    }))
-  };
 }
 
 class BrowserStorage implements PerfexaStorage {
@@ -214,8 +151,21 @@ class BrowserStorage implements PerfexaStorage {
   private readAll(): ImportedPackage[] {
     try {
       const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-      return raw ? (JSON.parse(raw) as ImportedPackage[]).map(normalizePackage) : [];
+      if (!raw) return [];
+
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+        return [];
+      }
+
+      const packages = parsed.filter(isCurrentPackage);
+      if (packages.length !== parsed.length) {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sortPackages(packages)));
+      }
+      return packages;
     } catch {
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
       return [];
     }
   }
@@ -246,6 +196,7 @@ class SqliteStorage implements PerfexaStorage {
     await this.migrateConfigsTableIfNeeded();
     await this.migrateTestsTableIfNeeded();
     await this.migrateRunsTableIfNeeded();
+    await this.migrateMeasurementsTableIfNeeded();
     await this.db.execute(`
       CREATE TABLE IF NOT EXISTS scenarios (
         package_id TEXT NOT NULL,
@@ -291,7 +242,6 @@ class SqliteStorage implements PerfexaStorage {
         run_id TEXT NOT NULL,
         metric_id TEXT NOT NULL,
         stat TEXT NOT NULL,
-        instance_type TEXT NOT NULL,
         instance_id TEXT NOT NULL,
         value REAL NOT NULL
       )
@@ -299,10 +249,21 @@ class SqliteStorage implements PerfexaStorage {
   }
 
   async listPackages(): Promise<ImportedPackage[]> {
-    const rows = await this.db.select<{ package_json: string }>(
-      "SELECT package_json FROM packages ORDER BY imported_at DESC"
+    const rows = await this.db.select<{ id: string; package_json: string }>(
+      "SELECT id, package_json FROM packages ORDER BY imported_at DESC"
     );
-    return rows.map((row) => normalizePackage(JSON.parse(row.package_json) as ImportedPackage));
+    const packages: ImportedPackage[] = [];
+
+    for (const row of rows) {
+      const pkg = parseStoredPackage(row.package_json);
+      if (pkg) {
+        packages.push(pkg);
+      } else {
+        await this.deletePackage(row.id);
+      }
+    }
+
+    return sortPackages(packages);
   }
 
   async getPackage(id: string): Promise<ImportedPackage | undefined> {
@@ -310,7 +271,13 @@ class SqliteStorage implements PerfexaStorage {
       "SELECT package_json FROM packages WHERE id = ?",
       [id]
     );
-    return rows[0] ? normalizePackage(JSON.parse(rows[0].package_json) as ImportedPackage) : undefined;
+    if (!rows[0]) return undefined;
+
+    const pkg = parseStoredPackage(rows[0].package_json);
+    if (!pkg) {
+      await this.deletePackage(id);
+    }
+    return pkg;
   }
 
   async savePackage(pkg: ImportedPackage): Promise<void> {
@@ -366,13 +333,12 @@ class SqliteStorage implements PerfexaStorage {
 
       for (const measurement of pkg.measurements) {
         await this.db.execute(
-          "INSERT INTO measurements (package_id, run_id, metric_id, stat, instance_type, instance_id, value) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO measurements (package_id, run_id, metric_id, stat, instance_id, value) VALUES (?, ?, ?, ?, ?, ?)",
           [
             pkg.id,
             measurement.run_id,
             measurement.metric_id,
             measurement.stat,
-            measurement.instance_type,
             measurement.instance_id,
             measurement.value
           ]
@@ -398,6 +364,35 @@ class SqliteStorage implements PerfexaStorage {
         !names.includes("sequence_id")
       ) {
         await this.db.execute("DROP TABLE IF EXISTS runs");
+      }
+    } catch {
+      // A missing table is fine; the current schema will be created below.
+    }
+  }
+
+  private async deletePackage(id: string): Promise<void> {
+    await this.db.execute("DELETE FROM packages WHERE id = ?", [id]);
+    await this.db.execute("DELETE FROM scenarios WHERE package_id = ?", [id]);
+    await this.db.execute("DELETE FROM configs WHERE package_id = ?", [id]);
+    await this.db.execute("DELETE FROM tests WHERE package_id = ?", [id]);
+    await this.db.execute("DELETE FROM runs WHERE package_id = ?", [id]);
+    await this.db.execute("DELETE FROM measurements WHERE package_id = ?", [id]);
+  }
+
+  private async migrateMeasurementsTableIfNeeded(): Promise<void> {
+    try {
+      const columns = await this.db.select<{ name: string }>("PRAGMA table_info(measurements)");
+      if (columns.length === 0) return;
+      const names = columns.map((column) => column.name);
+      if (
+        names.includes("instance_type") ||
+        !names.includes("run_id") ||
+        !names.includes("metric_id") ||
+        !names.includes("stat") ||
+        !names.includes("instance_id") ||
+        !names.includes("value")
+      ) {
+        await this.db.execute("DROP TABLE IF EXISTS measurements");
       }
     } catch {
       // A missing table is fine; the current schema will be created below.

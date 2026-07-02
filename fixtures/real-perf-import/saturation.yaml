@@ -3,7 +3,6 @@ defaults:
   saturatedWhen:
     - metric_id: throttling
       stat: max
-      instance_type: pod
       operator: ">"
       value: 20
 overrides:

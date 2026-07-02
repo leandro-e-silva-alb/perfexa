@@ -15,6 +15,7 @@ import {
   testRecordSchema,
   topologyDocumentSchema
 } from "./schemas";
+import { buildTopologyGraph, resolveTopologyMeasurements, validateMetricsDocument } from "./topologyMetrics";
 import type {
   ConfigRecord,
   ImportedPackage,
@@ -200,7 +201,6 @@ function crossValidate(input: {
         measurement.run_id,
         measurement.metric_id,
         measurement.stat,
-        measurement.instance_type,
         measurement.instance_id
       ].join("|"),
     "measurements.csv",
@@ -264,46 +264,22 @@ function crossValidate(input: {
     errors
   );
 
-  const groupMeasurementCount = measurements.filter((measurement) => measurement.instance_type === "group").length;
-  if (groupMeasurementCount > 0) {
-    errors.push(
-      issue(
-        "error",
-        `measurements.csv contains ${groupMeasurementCount} stored group measurement ${rowWord(
-          groupMeasurementCount
-        )}. Groups are derived from topology.yaml and must not be stored.`,
-        "measurements.csv"
-      )
-    );
+  for (const message of validateMetricsDocument(metrics)) {
+    errors.push(issue("error", message, "metrics.yaml"));
   }
 
-  addGroupedIssues(
-    measurements,
-    (measurement) => (!["run", "pod", "group"].includes(measurement.instance_type) ? measurement.instance_type : undefined),
-    "measurements.csv",
-    "warning",
-    (instanceType, count) =>
-      `Unknown instance_type "${instanceType}" appears in ${count} ${rowWord(
-        count
-      )}; rows will be imported but may not power core screens.`,
-    warnings
-  );
+  try {
+    buildTopologyGraph(topology);
+  } catch (error) {
+    errors.push(issue("error", error instanceof Error ? error.message : String(error), "topology.yaml"));
+  }
 
-  for (const [groupId, group] of Object.entries(topology.groups)) {
-    if (group.members.length === 0) {
-      errors.push(issue("error", `Group "${groupId}" has no members.`, "topology.yaml"));
-    }
-
-    for (const metricId of Object.keys(group.aggregations)) {
-      if (!metricIds.has(metricId)) {
-        warnings.push(
-          issue(
-            "warning",
-            `Group "${groupId}" defines aggregation for metric "${metricId}", but that metric is absent from metrics.yaml.`,
-            "topology.yaml"
-          )
-        );
-      }
+  if (errors.length === 0) {
+    try {
+      const resolution = resolveTopologyMeasurements(topology, metrics, measurements);
+      warnings.push(...resolution.warnings);
+    } catch (error) {
+      errors.push(issue("error", error instanceof Error ? error.message : String(error), "measurements.csv"));
     }
   }
 
@@ -343,8 +319,12 @@ function crossValidate(input: {
     warnings
   );
 
-  if (Object.keys(topology.groups).length === 0) {
-    warnings.push(issue("warning", "No topology groups were defined. Group views will be unavailable.", "topology.yaml"));
+  try {
+    if (buildTopologyGraph(topology).nodes.size === 0) {
+      warnings.push(issue("warning", "No topology nodes were defined. Topology projections will be unavailable.", "topology.yaml"));
+    }
+  } catch {
+    // The topology parse error is already reported above.
   }
 }
 

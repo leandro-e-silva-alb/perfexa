@@ -1,5 +1,5 @@
-import { deriveGroupMeasurements } from "./aggregation";
 import { evaluateSaturationForRun } from "./saturation";
+import { buildTopologyGraph, resolveTopologyMeasurements, type ProjectedMeasurement, type TopologyGraph } from "./topologyMetrics";
 import type { ConfigRecord, ImportedPackage, MeasurementRecord, RunRecord, SaturationEvaluation, TestRecord } from "./types";
 
 export interface RunSummary {
@@ -33,6 +33,8 @@ export interface MetricPoint extends MeasurementRecord {
   target_tps: number;
   effective_tps: number;
   unit: string;
+  scope: string;
+  source?: "observed" | "derived" | "rogue";
 }
 
 export function formatNumber(value: number | undefined, digits = 2): string {
@@ -101,7 +103,6 @@ export function findMeasurement(
   runId: string,
   metricId: string,
   stat: string,
-  instanceType: string,
   instanceId = ""
 ): number | undefined {
   return measurements.find(
@@ -109,7 +110,6 @@ export function findMeasurement(
       measurement.run_id === runId &&
       measurement.metric_id === metricId &&
       measurement.stat === stat &&
-      measurement.instance_type === instanceType &&
       measurement.instance_id === instanceId
   )?.value;
 }
@@ -165,10 +165,10 @@ export function buildRunSummary(pkg: ImportedPackage, run: RunRecord): RunSummar
     exagon_ver: exagonVer,
     components_ver: componentsVer,
     versions: componentVersionSummary(pkg, componentsVer),
-    effective_tps: findMeasurement(pkg.measurements, run.run_id, "throughput", "effective", "run"),
-    latency_avg: findMeasurement(pkg.measurements, run.run_id, "latency", "avg", "run"),
-    latency_p95: findMeasurement(pkg.measurements, run.run_id, "latency", "p95", "run"),
-    error_rate: findMeasurement(pkg.measurements, run.run_id, "error_rate", "avg", "run"),
+    effective_tps: findMeasurement(pkg.measurements, run.run_id, "throughput", "effective"),
+    latency_avg: findMeasurement(pkg.measurements, run.run_id, "latency", "avg"),
+    latency_p95: findMeasurement(pkg.measurements, run.run_id, "latency", "p95"),
+    error_rate: findMeasurement(pkg.measurements, run.run_id, "error_rate", "avg"),
     saturation: evaluateSaturationForRun(pkg, run)
   };
 }
@@ -183,26 +183,25 @@ export function measurementsForScope(
   pkg: ImportedPackage,
   metricId: string,
   stat: string,
-  scope: "run" | "pod" | "group"
+  scope: string,
+  selectedTestKey?: string
 ): MetricPoint[] {
-  const source =
-    scope === "group"
-      ? deriveGroupMeasurements(pkg.topology, pkg.measurements, metricId, stat)
-      : pkg.measurements;
+  const source = scope === "run"
+    ? pkg.measurements.filter((measurement) => measurement.instance_id === "")
+    : topologyMeasurementsForTest(pkg, metricId, stat, scope, selectedTestKey);
 
   return source
     .filter(
       (measurement) =>
         measurement.metric_id === metricId &&
-        measurement.stat === stat &&
-        measurement.instance_type === scope
+        measurement.stat === stat
     )
     .map((measurement) => {
       const run = pkg.runs.find((item) => item.run_id === measurement.run_id);
       const test = testForRun(pkg, run);
       const scenarioId = test?.scenario_id ?? run?.scenario_id ?? "";
       const effectiveTps =
-        run ? findMeasurement(pkg.measurements, run.run_id, "throughput", "effective", "run") : undefined;
+        run ? findMeasurement(pkg.measurements, run.run_id, "throughput", "effective") : undefined;
       return {
         ...measurement,
         test_key: run ? testKeyFor(run) : "",
@@ -213,7 +212,8 @@ export function measurementsForScope(
         sequence_id: run?.sequence_id ?? 0,
         target_tps: run?.target_tps ?? 0,
         effective_tps: effectiveTps ?? run?.target_tps ?? 0,
-        unit: metricUnit(pkg, metricId)
+        unit: metricUnit(pkg, metricId),
+        scope
       };
     })
     .sort(
@@ -222,4 +222,107 @@ export function measurementsForScope(
         a.instance_id.localeCompare(b.instance_id) ||
         a.run_id.localeCompare(b.run_id)
     );
+}
+
+function topologyMeasurementsForTest(
+  pkg: ImportedPackage,
+  metricId: string,
+  stat: string,
+  scope: string,
+  selectedTestKey?: string
+): ProjectedMeasurement[] {
+  const graph = buildTopologyGraph(pkg.topology);
+  const targetLevelIndex = graph.levels.indexOf(scope);
+  if (targetLevelIndex < 0 || !selectedTestKey) {
+    return resolveTopologyMeasurements(pkg.topology, pkg.metrics, pkg.measurements, metricId, stat, scope).projected;
+  }
+
+  const selectedRunIds = new Set(
+    pkg.runs
+      .filter((run) => testKeyFor(run) === selectedTestKey)
+      .map((run) => run.run_id)
+  );
+  const allProjected = resolveTopologyMeasurements(pkg.topology, pkg.metrics, pkg.measurements, metricId, stat).projected
+    .filter((measurement) => selectedRunIds.has(measurement.run_id));
+  const targetProjected = allProjected.filter((measurement) => measurement.topology_level === scope);
+  const collapseAncestors = collapseAncestorsForTest(graph, targetProjected, targetLevelIndex);
+
+  if (collapseAncestors.size === 0) {
+    return targetProjected;
+  }
+
+  const byRunAndId = new Map(allProjected.map((measurement) => [`${measurement.run_id}|${measurement.instance_id}`, measurement]));
+  const collapsed: ProjectedMeasurement[] = [];
+  const emitted = new Set<string>();
+
+  for (const measurement of targetProjected) {
+    const ancestorId = matchingCollapseAncestor(graph, measurement.instance_id, collapseAncestors);
+    if (!ancestorId) {
+      const key = `${measurement.run_id}|${measurement.instance_id}`;
+      if (!emitted.has(key)) {
+        collapsed.push(measurement);
+        emitted.add(key);
+      }
+      continue;
+    }
+
+    const ancestorMeasurement = byRunAndId.get(`${measurement.run_id}|${ancestorId}`);
+    if (!ancestorMeasurement) continue;
+
+    const key = `${ancestorMeasurement.run_id}|${ancestorMeasurement.instance_id}`;
+    if (!emitted.has(key)) {
+      collapsed.push({
+        ...ancestorMeasurement,
+        topology_level: scope,
+        topology_level_index: targetLevelIndex
+      });
+      emitted.add(key);
+    }
+  }
+
+  return collapsed;
+}
+
+function collapseAncestorsForTest(
+  graph: TopologyGraph,
+  targetProjected: ProjectedMeasurement[],
+  targetLevelIndex: number
+): Set<string> {
+  const ancestors = new Set<string>();
+
+  for (const measurement of targetProjected) {
+    const node = graph.nodes.get(measurement.instance_id);
+    if (node && node.levelIndex < targetLevelIndex) {
+      ancestors.add(node.id);
+    }
+  }
+
+  for (const ancestorId of [...ancestors]) {
+    if (hasAncestorInSet(graph, ancestorId, ancestors)) {
+      ancestors.delete(ancestorId);
+    }
+  }
+
+  return ancestors;
+}
+
+function hasAncestorInSet(graph: TopologyGraph, nodeId: string, ids: Set<string>): boolean {
+  let parentId = graph.nodes.get(nodeId)?.parent;
+  while (parentId) {
+    if (ids.has(parentId)) return true;
+    parentId = graph.nodes.get(parentId)?.parent;
+  }
+  return false;
+}
+
+function matchingCollapseAncestor(graph: TopologyGraph, nodeId: string, ids: Set<string>): string | undefined {
+  if (ids.has(nodeId)) return nodeId;
+
+  let parentId = graph.nodes.get(nodeId)?.parent;
+  while (parentId) {
+    if (ids.has(parentId)) return parentId;
+    parentId = graph.nodes.get(parentId)?.parent;
+  }
+
+  return undefined;
 }

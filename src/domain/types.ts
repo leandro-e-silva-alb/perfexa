@@ -1,7 +1,7 @@
 export type MetricId = string;
 export type StatId = string;
-export type InstanceType = "run" | "pod" | string;
-export type AggregationMethod = "sum" | "avg" | "min" | "max";
+export type MetricAggregation = "sum" | "average" | "ratio" | "percentage" | "max";
+export type UnknownValuesMode = "strict" | "permissive" | "ignore";
 export type AvailabilityStatus = "available" | "partial" | "unavailable";
 export type SaturationOperator = ">" | ">=" | "<" | "<=" | "=" | "==" | "!=";
 
@@ -36,18 +36,18 @@ export interface MeasurementRecord {
   run_id: string;
   metric_id: MetricId;
   stat: StatId;
-  instance_type: InstanceType;
   instance_id: string;
   value: number;
 }
 
 export interface MetricDefinition {
-  unit: string;
-  description: string;
+  aggregation: MetricAggregation;
+  weight?: MetricId;
+  unit?: string;
+  description?: string;
 }
 
 export interface MetricsDocument {
-  schemaVersion: 1;
   metrics: Record<MetricId, MetricDefinition>;
 }
 
@@ -61,20 +61,16 @@ export interface ManifestDocument {
   components: Record<string, ComponentDefinition>;
 }
 
-export interface TopologyGroup {
-  members: string[];
-  aggregations: Record<MetricId, AggregationMethod>;
-}
-
 export interface TopologyDocument {
-  schemaVersion: 1;
-  groups: Record<string, TopologyGroup>;
+  unknownValues: UnknownValuesMode;
+  levels: string[];
+  topology: Record<string, Record<string, string[]>>;
+  standalone: Record<string, string[]>;
 }
 
 export interface SaturationRule {
   metric_id: MetricId;
   stat: StatId;
-  instance_type: InstanceType;
   instance_id?: string;
   operator: SaturationOperator;
   value: number;
@@ -118,7 +114,7 @@ export interface NotesDocument {
 export interface FeatureRequirement {
   metric_id: MetricId;
   stat: StatId;
-  instance_type: InstanceType;
+  instance_id?: string;
   label: string;
 }
 

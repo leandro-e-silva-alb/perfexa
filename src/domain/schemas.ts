@@ -64,17 +64,17 @@ export const measurementRecordSchema: z.ZodType<MeasurementRecord, z.ZodTypeDef,
   run_id: requiredText,
   metric_id: requiredText,
   stat: requiredText,
-  instance_type: requiredText,
   instance_id: textCell.default(""),
   value: numberCell
 });
 
 export const metricsDocumentSchema: z.ZodType<MetricsDocument, z.ZodTypeDef, unknown> = z.object({
-  schemaVersion: z.literal(1),
   metrics: z.record(
     z.object({
-      unit: requiredText,
-      description: textCell.default("")
+      aggregation: z.enum(["sum", "average", "ratio", "percentage", "max"]),
+      weight: requiredText.optional(),
+      unit: textCell.optional(),
+      description: textCell.optional()
     })
   )
 });
@@ -92,15 +92,10 @@ export const manifestDocumentSchema: z.ZodType<ManifestDocument, z.ZodTypeDef, u
 });
 
 export const topologyDocumentSchema: z.ZodType<TopologyDocument, z.ZodTypeDef, unknown> = z.object({
-  schemaVersion: z.literal(1),
-  groups: z
-    .record(
-      z.object({
-        members: z.array(requiredText).min(1, "A group must have at least one member"),
-        aggregations: z.record(z.enum(["sum", "avg", "min", "max"]))
-      })
-    )
-    .default({})
+  unknownValues: z.enum(["strict", "permissive", "ignore"]).default("strict"),
+  levels: z.array(requiredText).min(1, "At least one topology level is required"),
+  topology: z.record(z.record(z.array(requiredText))).default({}),
+  standalone: z.record(z.array(requiredText)).default({})
 });
 
 export const saturationDocumentSchema: z.ZodType<SaturationDocument, z.ZodTypeDef, unknown> = z.object({
@@ -112,7 +107,6 @@ export const saturationDocumentSchema: z.ZodType<SaturationDocument, z.ZodTypeDe
           z.object({
             metric_id: requiredText,
             stat: requiredText,
-            instance_type: requiredText,
             instance_id: requiredText.optional(),
             operator: z.enum([">", ">=", "<", "<=", "=", "==", "!="]),
             value: numberCell
@@ -162,5 +156,5 @@ export const csvColumns = {
   tests: ["scenario_id", "config_id", "sequence_id"],
   configs: ["config_id", "exagon_ver", "components_ver"],
   scenarios: ["scenario_id", "name"],
-  measurements: ["run_id", "metric_id", "stat", "instance_type", "instance_id", "value"]
+  measurements: ["run_id", "metric_id", "stat", "instance_id", "value"]
 };
