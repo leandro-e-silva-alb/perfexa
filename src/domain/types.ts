@@ -61,11 +61,22 @@ export interface ManifestDocument {
   components: Record<string, ComponentDefinition>;
 }
 
+export interface TopologyLayerDefinition {
+  key: string;
+  symbol?: string;
+}
+
+export interface TopologyNodeDefinition {
+  key: string;
+  layer: string;
+  color?: string | null;
+  children: string[];
+}
+
 export interface TopologyDocument {
   unknownValues: UnknownValuesMode;
-  levels: string[];
-  topology: Record<string, Record<string, string[]>>;
-  standalone: Record<string, string[]>;
+  layers: TopologyLayerDefinition[];
+  nodes: TopologyNodeDefinition[];
 }
 
 export interface SaturationRule {

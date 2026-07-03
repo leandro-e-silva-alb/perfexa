@@ -1,6 +1,6 @@
 import { evaluateSaturationByRun } from "./saturation";
 import { scenarioName, testKeyFor } from "./selectors";
-import { resolveTopologyMeasurements } from "./topologyMetrics";
+import { buildTopologyGraph, resolveTopologyMeasurements } from "./topologyMetrics";
 import type { ImportedPackage, MeasurementRecord, RunRecord, TestRecord } from "./types";
 
 export interface RegressionPoint {
@@ -80,7 +80,7 @@ function buildEffectiveTpsByRun(measurements: MeasurementRecord[]): Map<string, 
 }
 
 function buildCpuByRun(pkg: ImportedPackage): Map<string, number> {
-  const topLevel = pkg.topology.levels[0];
+  const topLevel = buildTopologyGraph(pkg.topology).levels[0];
   if (!topLevel) {
     return new Map();
   }

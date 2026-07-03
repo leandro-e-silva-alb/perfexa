@@ -42,11 +42,15 @@ metrics:
 `,
   "topology.yaml": `
 unknownValues: strict
-levels: [group, pod]
-topology:
-  group:
-    kafka: [kafka-0, kafka-1]
-standalone: {}
+layers:
+  - key: group
+    symbol: square
+  - key: pod
+nodes:
+  - key: kafka
+    layer: group
+    color: "#ff0043"
+    children: [kafka-0, kafka-1]
 `,
   "saturation.yaml": `
 schemaVersion: 1

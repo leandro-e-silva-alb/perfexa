@@ -1,25 +1,48 @@
 unknownValues: strict
-levels:
-  - group
-  - pod
-topology:
-  group:
-    im:
+layers:
+  - key: group
+    symbol: square
+  - key: pod
+nodes:
+  - key: im
+    layer: group
+    color: "#2563eb"
+    children:
       - im-0
-    kafka:
+  - key: kafka
+    layer: group
+    color: "#7c3aed"
+    children:
       - kafka-0
       - kafka-1
       - kafka-2
-    orch-a:
+  - key: orch-a
+    layer: group
+    color: "#0891b2"
+    children:
       - orch-a-0
-    part-b:
+  - key: part-b
+    layer: group
+    color: "#16a34a"
+    children:
       - part-b-0
-    part-c:
+  - key: part-c
+    layer: group
+    color: "#ca8a04"
+    children:
       - part-c-0
-    rf:
+  - key: rf
+    layer: group
+    color: "#f97316"
+    children:
       - rf-0
-    mongo:
+  - key: mongo
+    layer: group
+    color: "#db2777"
+    children:
       - mongo-a-0
-    redis:
+  - key: redis
+    layer: group
+    color: "#dc2626"
+    children:
       - redis-0
-standalone: {}

@@ -4,24 +4,21 @@ import type { MeasurementRecord, MetricsDocument, TopologyDocument } from "./typ
 
 const topology: TopologyDocument = {
   unknownValues: "permissive",
-  levels: ["continent", "region", "country", "city"],
-  topology: {
-    continent: {
-      america: ["north_america", "south_america"]
-    },
-    region: {
-      south_america: ["brazil", "venezuela"],
-      europe: ["portugal", "london", "paris"]
-    },
-    country: {
-      brazil: ["rio", "sao_paulo"],
-      portugal: ["lisbon", "porto"],
-      venezuela: ["caracas"]
-    }
-  },
-  standalone: {
-    region: ["atlantis"]
-  }
+  layers: [
+    { key: "continent", symbol: "square" },
+    { key: "region", symbol: "triangle" },
+    { key: "country" },
+    { key: "city" }
+  ],
+  nodes: [
+    { key: "america", layer: "continent", color: "#ff0043", children: ["north_america", "south_america"] },
+    { key: "south_america", layer: "region", children: ["brazil", "venezuela"] },
+    { key: "europe", layer: "region", children: ["portugal", "london", "paris"] },
+    { key: "brazil", layer: "country", children: ["rio", "sao_paulo"] },
+    { key: "portugal", layer: "country", children: ["lisbon", "porto"] },
+    { key: "venezuela", layer: "country", children: ["caracas"] },
+    { key: "atlantis", layer: "region", children: [] }
+  ]
 };
 
 const metrics: MetricsDocument = {
@@ -69,16 +66,22 @@ describe("topology metric resolver", () => {
     expect(() =>
       buildTopologyGraph({
         unknownValues: "strict",
-        levels: ["group", "pod"],
-        topology: {
-          group: {
-            left: ["shared"],
-            right: ["shared"]
-          }
-        },
-        standalone: {}
+        layers: [{ key: "group" }, { key: "pod" }],
+        nodes: [
+          { key: "left", layer: "group", children: ["shared"] },
+          { key: "right", layer: "group", children: ["shared"] }
+        ]
       })
     ).toThrow(/belongs to both/);
+  });
+
+  it("exposes layer symbols and inherited color variants", () => {
+    const graph = buildTopologyGraph(topology);
+
+    expect(graph.nodes.get("america")?.symbol).toBe("rect");
+    expect(graph.nodes.get("south_america")?.symbol).toBe("triangle");
+    expect(graph.nodes.get("north_america")?.color).toBe("#990028");
+    expect(graph.nodes.get("south_america")?.color).toBe("#ff668e");
   });
 
   it("validates metric definitions required for regression", () => {
@@ -94,7 +97,7 @@ describe("topology metric resolver", () => {
     const projected = resolveTopologyMeasurements(topology, metrics, observations, "wins", "avg").projected;
     const projectedMatches = resolveTopologyMeasurements(topology, metrics, observations, "matches", "avg").projected;
 
-    for (const level of topology.levels) {
+    for (const level of buildTopologyGraph(topology).levels) {
       const winsRows = projected.filter((item) => item.topology_level === level);
       const matchRows = projectedMatches.filter((item) => item.topology_level === level);
       const matchesById = new Map(matchRows.map((item) => [item.instance_id, item.value]));
@@ -119,9 +122,8 @@ describe("topology metric resolver", () => {
   it("allows a parent-only observation and carries it through deeper projections", () => {
     const parentOnlyTopology: TopologyDocument = {
       unknownValues: "strict",
-      levels: ["group", "pod"],
-      topology: { group: { kafka: ["kafka-0", "kafka-1"] } },
-      standalone: {}
+      layers: [{ key: "group" }, { key: "pod" }],
+      nodes: [{ key: "kafka", layer: "group", children: ["kafka-0", "kafka-1"] }]
     };
     const parentOnlyMetrics: MetricsDocument = {
       metrics: { cpu: { aggregation: "sum" } }

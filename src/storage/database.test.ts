@@ -16,9 +16,11 @@ function currentPackage(): ImportedPackage {
     },
     topology: {
       unknownValues: "strict",
-      levels: ["group", "pod"],
-      topology: { group: { rf: ["rf-a-0", "rf-b-0"] } },
-      standalone: { group: ["im"] }
+      layers: [{ key: "group", symbol: "square" }, { key: "pod" }],
+      nodes: [
+        { key: "rf", layer: "group", color: "#ff0043", children: ["rf-a-0", "rf-b-0"] },
+        { key: "im", layer: "group", color: null, children: [] }
+      ]
     },
     saturation: {
       schemaVersion: 1,

@@ -93,9 +93,24 @@ export const manifestDocumentSchema: z.ZodType<ManifestDocument, z.ZodTypeDef, u
 
 export const topologyDocumentSchema: z.ZodType<TopologyDocument, z.ZodTypeDef, unknown> = z.object({
   unknownValues: z.enum(["strict", "permissive", "ignore"]).default("strict"),
-  levels: z.array(requiredText).min(1, "At least one topology level is required"),
-  topology: z.record(z.record(z.array(requiredText))).default({}),
-  standalone: z.record(z.array(requiredText)).default({})
+  layers: z
+    .array(
+      z.object({
+        key: requiredText,
+        symbol: textCell.optional()
+      })
+    )
+    .min(1, "At least one topology layer is required"),
+  nodes: z
+    .array(
+      z.object({
+        key: requiredText,
+        layer: requiredText,
+        color: textCell.nullable().optional(),
+        children: z.array(requiredText).default([])
+      })
+    )
+    .default([])
 });
 
 export const saturationDocumentSchema: z.ZodType<SaturationDocument, z.ZodTypeDef, unknown> = z.object({

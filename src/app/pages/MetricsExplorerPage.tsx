@@ -11,16 +11,18 @@ import {
   testNameFor,
   type MetricPoint
 } from "../../domain/selectors";
+import { buildTopologyGraph, type TopologyGraph } from "../../domain/topologyMetrics";
 import type { ImportedPackage } from "../../domain/types";
 import { useAppState } from "../AppState";
 
 type Scope = string;
 type ChartMode = "line" | "stackedArea";
 type ChartDatum = [number, number, string];
-type StackedAreaDatum = { value: number; runIds: string };
+type StackedAreaDatum = [number, number, string];
 type TooltipParam = {
   seriesName: string;
   marker?: string;
+  color?: string;
   data: ChartDatum | StackedAreaDatum | number;
   value?: ChartDatum | StackedAreaDatum | number;
   axisValue?: string | number;
@@ -28,6 +30,10 @@ type TooltipParam = {
 };
 type AxisPointerLabelParam = { axisDimension?: string; value: string | number };
 type LegendSelectChangedParam = { selected?: Record<string, boolean> };
+type ChartMouseEventParam = {
+  componentType?: string;
+  seriesName?: string;
+};
 type MetricConfig = {
   id: string;
   label: string;
@@ -40,22 +46,125 @@ const MAX_TOPOLOGY_TOOLTIP_ITEMS = 8;
 
 function niceAxisMax(value: number): number | undefined {
   if (!Number.isFinite(value) || value <= 0) return undefined;
-  const magnitude = 10 ** Math.floor(Math.log10(value));
-  const normalized = value / magnitude;
-  const niceNormalized = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
-  return niceNormalized * magnitude;
+  const targetTicks = 5;
+  const rawStep = value / targetTicks;
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const normalizedStep = rawStep / magnitude;
+  const niceSteps = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+  const niceStep = (niceSteps.find((step) => normalizedStep <= step) ?? 10) * magnitude;
+  return Math.ceil(value / niceStep) * niceStep;
 }
 
-function tooltipValue(param: TooltipParam): number {
-  if (Array.isArray(param.data)) return param.data[1];
+function tooltipValue(param: TooltipParam, mode: ChartMode): number {
+  if (Array.isArray(param.data)) return mode === "stackedArea" ? param.data[0] : param.data[1];
   if (typeof param.data === "number") return param.data;
-  return param.data.value;
+  return 0;
 }
 
 function tooltipRunIds(param: TooltipParam): string {
   if (Array.isArray(param.data)) return param.data[2];
   if (typeof param.data === "number") return "";
-  return param.data.runIds;
+  return "";
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => {
+    const entities: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    };
+    return entities[character];
+  });
+}
+
+function safeCssColor(value: string | undefined): string {
+  if (!value) return "#64748b";
+  return value.replace(/[;"'<>]/g, "");
+}
+
+function normalizeChartSymbol(symbol: string | undefined): "circle" | "square" | "triangle" | "diamond" {
+  switch (symbol?.trim().toLowerCase()) {
+    case "rect":
+    case "square":
+      return "square";
+    case "triangle":
+      return "triangle";
+    case "diamond":
+      return "diamond";
+    case "circle":
+    default:
+      return "circle";
+  }
+}
+
+function emptyChartSymbol(symbol: string | undefined): string {
+  switch (normalizeChartSymbol(symbol)) {
+    case "square":
+      return "emptyRect";
+    case "triangle":
+      return "emptyTriangle";
+    case "diamond":
+      return "emptyDiamond";
+    case "circle":
+    default:
+      return "emptyCircle";
+  }
+}
+
+function tooltipShapeSvg(symbol: string | undefined, color: string): string {
+  const shapeStyle = `fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"`;
+
+  switch (normalizeChartSymbol(symbol)) {
+    case "square":
+      return `<rect x="2.5" y="2.5" width="7" height="7" rx="1.2" ${shapeStyle} />`;
+    case "triangle":
+      return `<path d="M6 2.1 L10 9.4 H2 Z" ${shapeStyle} />`;
+    case "diamond":
+      return `<path d="M6 1.8 L10.2 6 L6 10.2 L1.8 6 Z" ${shapeStyle} />`;
+    case "circle":
+    default:
+      return `<circle cx="6" cy="6" r="4" ${shapeStyle} />`;
+  }
+}
+
+function sameTooltipSeries(left: TooltipParam, right: TooltipParam): boolean {
+  return left.seriesName === right.seriesName;
+}
+
+function orderSeriesNames(names: string[], graph: TopologyGraph | null, scope: string): string[] {
+  const fallback = [...names].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  if (!graph) return fallback;
+
+  const targetLevelIndex = graph.levels.indexOf(scope);
+  if (targetLevelIndex < 0) return fallback;
+
+  const remaining = new Set(names);
+  const ordered: string[] = [];
+  const visitNode = (nodeId: string) => {
+    const node = graph.nodes.get(nodeId);
+    if (!node) return;
+
+    if (remaining.delete(node.id)) {
+      ordered.push(node.id);
+    }
+
+    if (node.levelIndex >= targetLevelIndex) {
+      return;
+    }
+
+    for (const childId of node.children) {
+      visitNode(childId);
+    }
+  };
+
+  for (const rootId of graph.roots) {
+    visitNode(rootId);
+  }
+
+  return [...ordered, ...fallback.filter((name) => remaining.has(name))];
 }
 
 function availableStatsForMetric(
@@ -92,7 +201,7 @@ function scopeOptionsForMetric(metric: MetricConfig, pkg: ImportedPackage | null
     return ["run"];
   }
 
-  return pkg?.topology.levels ?? [];
+  return pkg ? buildTopologyGraph(pkg.topology).levels : [];
 }
 
 export function MetricsExplorerPage() {
@@ -104,6 +213,7 @@ export function MetricsExplorerPage() {
   const [selectedTestKey, setSelectedTestKey] = useState("");
   const [chartMode, setChartMode] = useState<ChartMode>("line");
   const [legendSelected, setLegendSelected] = useState<Record<string, boolean>>({});
+  const [highlightedSeriesName, setHighlightedSeriesName] = useState<string | null>(null);
 
   const testOptions = useMemo(() => {
     if (!activePackage) return [];
@@ -113,6 +223,9 @@ export function MetricsExplorerPage() {
         label: testNameFor(activePackage, test)
       }))
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+  }, [activePackage]);
+  const topologyGraph = useMemo(() => {
+    return activePackage ? buildTopologyGraph(activePackage.topology) : null;
   }, [activePackage]);
 
   useEffect(() => {
@@ -142,7 +255,8 @@ export function MetricsExplorerPage() {
 
   useEffect(() => {
     setLegendSelected({});
-  }, [metricId, scope, selectedTestKey, stat]);
+    setHighlightedSeriesName(null);
+  }, [chartMode, metricId, scope, selectedTestKey, stat]);
 
   const scopeOptions = useMemo(() => {
     return scopeOptionsForMetric(config, activePackage);
@@ -196,16 +310,18 @@ export function MetricsExplorerPage() {
 
   const unit = metricUnit(activePackage, metricId);
   const selectedTestLabel = testOptions.find((test) => test.key === selectedTestKey)?.label ?? "No test selected";
-  const seriesNames = [...new Set(rows.map((row) => row.instance_id || row.scope))].sort((a, b) =>
-    a.localeCompare(b, undefined, { numeric: true })
+  const seriesNames = orderSeriesNames(
+    [...new Set(rows.map((row) => row.instance_id || row.scope))],
+    topologyGraph,
+    scope
   );
   const normalizedLegendSelected = Object.fromEntries(
     seriesNames.map((name) => [name, legendSelected[name] ?? true])
   );
+  const seriesOrder = new Map(seriesNames.map((name, index) => [name, index]));
   const visibleSeriesNames = seriesNames.filter((name) => normalizedLegendSelected[name]);
   const yAxisSeriesNames = visibleSeriesNames.length > 0 ? visibleSeriesNames : seriesNames;
   const effectiveTpsValues = [...new Set(rows.map((row) => row.effective_tps))].sort((a, b) => a - b);
-  const firstEffectiveTps = effectiveTpsValues[0];
   const lastEffectiveTps = effectiveTpsValues[effectiveTpsValues.length - 1];
   const valuesBySeriesAndTps = rows.reduce((seriesMap, row) => {
     const seriesName = row.instance_id || row.scope;
@@ -230,13 +346,51 @@ export function MetricsExplorerPage() {
       .filter((row) => (row.instance_id || row.scope) === name)
       .sort((a, b) => a.effective_tps - b.effective_tps || a.run_id.localeCompare(b.run_id));
     const isDerivedSeries = seriesRows.length > 0 && seriesRows.every((row) => row.source === "derived");
+    const topologyNode = topologyGraph?.nodes.get(name);
+    const seriesColor = topologyNode?.color;
+    const isDimmedByHighlight = Boolean(highlightedSeriesName && highlightedSeriesName !== name);
+    const lineOpacity = isDimmedByHighlight ? 0.2 : 1;
+    const areaOpacity = isDimmedByHighlight ? 0.14 : 0.86;
+    const pointOpacity = isDimmedByHighlight ? 0.28 : 1;
+    const lineStyle = {
+      opacity: lineOpacity,
+      ...(isDerivedSeries ? { type: "dashed" } : {}),
+      ...(seriesColor ? { color: seriesColor } : {})
+    };
+    const areaStyle = {
+      opacity: areaOpacity,
+      ...(seriesColor ? { color: seriesColor } : {})
+    };
+    const itemStyle = {
+      opacity: pointOpacity,
+      borderWidth: 2,
+      ...(seriesColor ? { borderColor: seriesColor } : {})
+    };
+    const emphasis = {
+      itemStyle: {
+        opacity: pointOpacity,
+        borderWidth: 3,
+        ...(seriesColor ? { borderColor: seriesColor } : {})
+      },
+      lineStyle: {
+        opacity: lineOpacity,
+        ...(seriesColor ? { color: seriesColor } : {})
+      },
+      areaStyle:
+        effectiveChartMode === "stackedArea"
+          ? {
+              opacity: areaOpacity,
+              ...(seriesColor ? { color: seriesColor } : {})
+            }
+          : undefined
+    };
     const data =
       effectiveChartMode === "stackedArea"
-        ? effectiveTpsValues.map((effectiveTps): ChartDatum => {
+        ? effectiveTpsValues.map((effectiveTps): StackedAreaDatum => {
             const bucket = valuesBySeriesAndTps.get(name)?.get(effectiveTps);
             return [
-              effectiveTps,
               bucket ? bucket.total / bucket.count : 0,
+              effectiveTps,
               bucket?.runIds.join(", ") ?? ""
             ];
           })
@@ -245,46 +399,100 @@ export function MetricsExplorerPage() {
     return {
       name,
       type: "line",
-      dimensions: effectiveChartMode === "line" ? ["effective_tps", "value", "run_id"] : undefined,
-      encode:
-        effectiveChartMode === "line"
-          ? { x: "effective_tps", y: "value", tooltip: ["effective_tps", "value", "run_id"] }
-          : undefined,
-      stack: effectiveChartMode === "stackedArea" ? "total" : undefined,
-      areaStyle: effectiveChartMode === "stackedArea" ? { opacity: 0.86 } : undefined,
-      lineStyle: isDerivedSeries ? { type: "dashed" } : undefined,
-      emphasis: { focus: "series" },
-      showSymbol: effectiveChartMode === "line",
-      symbolSize: 7,
-      data:
+      color: seriesColor,
+      dimensions:
         effectiveChartMode === "stackedArea"
-          ? data.map((item): StackedAreaDatum => ({ value: item[1], runIds: item[2] }))
-          : data
+          ? ["value", "effective_tps", "run_id"]
+          : ["effective_tps", "value", "run_id"],
+      encode:
+        { x: "effective_tps", y: "value", tooltip: ["effective_tps", "value", "run_id"] },
+      stack: effectiveChartMode === "stackedArea" ? "total" : undefined,
+      areaStyle: effectiveChartMode === "stackedArea" ? areaStyle : undefined,
+      lineStyle: Object.keys(lineStyle).length > 0 ? lineStyle : undefined,
+      itemStyle,
+      emphasis,
+      triggerLineEvent: true,
+      showSymbol: true,
+      showAllSymbol: true,
+      symbol: emptyChartSymbol(topologyNode?.symbol),
+      symbolSize: 8,
+      data
     };
   });
+  const tooltipMarker = (param: TooltipParam): string => {
+    const topologyNode = topologyGraph?.nodes.get(param.seriesName);
+    const color = safeCssColor(topologyNode?.color ?? (typeof param.color === "string" ? param.color : undefined));
+    return [
+      '<span style="display:inline-flex;width:14px;height:14px;margin-right:6px;vertical-align:-2px;align-items:center;justify-content:center;">',
+      `<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">`,
+      tooltipShapeSvg(topologyNode?.symbol, color),
+      "</svg>",
+      "</span>"
+    ].join("");
+  };
+  const tooltipRow = (item: TooltipParam): string => {
+    const isHighlighted = item.seriesName === highlightedSeriesName;
+    const isDimmed = Boolean(highlightedSeriesName && !isHighlighted);
+    const style = [
+      "display:inline-block",
+      `opacity:${isDimmed ? "0.35" : "1"}`,
+      `font-weight:${isHighlighted ? "700" : "400"}`
+    ].join(";");
+
+    return `<span style="${style}">${tooltipMarker(item)}${escapeHtml(item.seriesName)}: ${formatNumber(
+      tooltipValue(item, effectiveChartMode),
+      2
+    )} ${unit}</span>`;
+  };
+  const hiddenTooltipRow = (hiddenItems: TooltipParam[]): string => {
+    const hiddenTotal = hiddenItems.reduce((sum, item) => sum + tooltipValue(item, effectiveChartMode), 0);
+    const label = isAdditiveMetric
+      ? `+${hiddenItems.length} more: ${formatNumber(hiddenTotal, 2)} ${unit}`
+      : `+${hiddenItems.length} more smaller values`;
+    const style = [
+      "display:inline-block",
+      `opacity:${highlightedSeriesName ? "0.35" : "1"}`,
+      "font-weight:400"
+    ].join(";");
+
+    return `<span style="${style}">${escapeHtml(label)}</span>`;
+  };
   const formatTooltip = (params: TooltipParam | TooltipParam[]) => {
     const items = Array.isArray(params) ? params : [params];
     const tps =
       items[0]?.axisValueLabel ??
       items[0]?.axisValue ??
-      (Array.isArray(items[0]?.data) ? items[0].data[0] : "-");
+      (Array.isArray(items[0]?.data)
+        ? effectiveChartMode === "stackedArea"
+          ? items[0].data[1]
+          : items[0].data[0]
+        : "-");
     const formatTooltipRows = (tooltipItems: TooltipParam[], includeTotal: boolean) => {
-      const sortedItems = [...tooltipItems].sort((a, b) => tooltipValue(b) - tooltipValue(a));
+      const sortedItems = [...tooltipItems].sort((a, b) => {
+        if (effectiveChartMode === "stackedArea") {
+          return (seriesOrder.get(a.seriesName) ?? Number.MAX_SAFE_INTEGER) -
+            (seriesOrder.get(b.seriesName) ?? Number.MAX_SAFE_INTEGER);
+        }
+        return tooltipValue(b, effectiveChartMode) - tooltipValue(a, effectiveChartMode);
+      });
       const isCompact = config.scopeType === "topology" && sortedItems.length > MAX_TOPOLOGY_TOOLTIP_ITEMS;
+      const highlightedItem = highlightedSeriesName
+        ? sortedItems.find((item) => item.seriesName === highlightedSeriesName)
+        : undefined;
       const shownItems = isCompact ? sortedItems.slice(0, MAX_TOPOLOGY_TOOLTIP_ITEMS) : sortedItems;
       const hiddenItems = isCompact ? sortedItems.slice(MAX_TOPOLOGY_TOOLTIP_ITEMS) : [];
-      const total = sortedItems.reduce((sum, item) => sum + tooltipValue(item), 0);
-      const lines = shownItems.map(
-        (item) => `${item.marker ?? ""}${item.seriesName}: ${formatNumber(tooltipValue(item), 2)} ${unit}`
+      const highlightedItemIsHidden = Boolean(
+        highlightedItem && hiddenItems.some((item) => sameTooltipSeries(item, highlightedItem))
       );
+      const visibleItems = highlightedItemIsHidden ? [...shownItems, highlightedItem as TooltipParam] : shownItems;
+      const collapsedItems = highlightedItemIsHidden
+        ? hiddenItems.filter((item) => !sameTooltipSeries(item, highlightedItem as TooltipParam))
+        : hiddenItems;
+      const total = sortedItems.reduce((sum, item) => sum + tooltipValue(item, effectiveChartMode), 0);
+      const lines = visibleItems.map(tooltipRow);
 
-      if (hiddenItems.length > 0) {
-        const hiddenTotal = hiddenItems.reduce((sum, item) => sum + tooltipValue(item), 0);
-        lines.push(
-          isAdditiveMetric
-            ? `+${hiddenItems.length} more: ${formatNumber(hiddenTotal, 2)} ${unit}`
-            : `+${hiddenItems.length} more smaller values`
-        );
+      if (collapsedItems.length > 0) {
+        lines.push(hiddenTooltipRow(collapsedItems));
       }
 
       return includeTotal
@@ -293,29 +501,51 @@ export function MetricsExplorerPage() {
     };
 
     if (effectiveChartMode === "stackedArea") {
-      const visibleItems = items.filter((item) => item.data && tooltipValue(item) > 0);
+      const visibleItems = items.filter((item) => item.data && tooltipValue(item, effectiveChartMode) > 0);
       return formatTooltipRows(visibleItems, true).join("<br/>");
     }
 
     const lineItems = items.filter((item) => item.data);
     if (lineItems.length > 1) {
-      const runIds = [...new Set(lineItems.map(tooltipRunIds).filter(Boolean))].join(", ");
+      const runIds = escapeHtml([...new Set(lineItems.map(tooltipRunIds).filter(Boolean))].join(", "));
       const lines = formatTooltipRows(lineItems, isAdditiveMetric);
       return [lines[0], runIds, ...lines.slice(1)].filter(Boolean).join("<br/>");
     }
 
     const item = items[0];
-    const runIds = tooltipRunIds(item);
-    return `${item.seriesName}<br/>Effective TPS ${tps}<br/>${formatNumber(tooltipValue(item), 2)} ${unit}<br/>${runIds}`;
+    const runIds = escapeHtml(tooltipRunIds(item));
+    return `${tooltipMarker(item)}${escapeHtml(item.seriesName)}<br/>Effective TPS ${tps}<br/>${formatNumber(
+      tooltipValue(item, effectiveChartMode),
+      2
+    )} ${unit}<br/>${runIds}`;
   };
   const formatAxisPointerLabel = (params: AxisPointerLabelParam) => {
-    if (params.axisDimension === "x") return `Effective TPS ${params.value}`;
     const numericValue = Number(params.value);
+    if (params.axisDimension === "x") {
+      return Number.isFinite(numericValue) ? `Effective TPS ${formatNumber(numericValue, 2)}` : `Effective TPS ${params.value}`;
+    }
     return Number.isFinite(numericValue) ? `${formatNumber(numericValue, 2)} ${unit}` : String(params.value);
+  };
+  const formatXAxisLabel = (value: string | number) => {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? formatNumber(numericValue, 0) : String(value);
   };
   const handleLegendSelectChanged = (event: LegendSelectChangedParam) => {
     if (event.selected) {
       setLegendSelected(event.selected);
+      if (highlightedSeriesName && event.selected[highlightedSeriesName] === false) {
+        setHighlightedSeriesName(null);
+      }
+    }
+  };
+  const handleChartMouseOver = (event: ChartMouseEventParam) => {
+    if (event.componentType === "series" && event.seriesName && normalizedLegendSelected[event.seriesName]) {
+      setHighlightedSeriesName(event.seriesName);
+    }
+  };
+  const clearHighlightedSeries = () => {
+    if (highlightedSeriesName) {
+      setHighlightedSeriesName(null);
     }
   };
   const chartOption = {
@@ -344,24 +574,17 @@ export function MetricsExplorerPage() {
       textStyle: { color: "#3a424b" }
     },
     grid: { left: 14, right: 28, top: 64, bottom: 50, containLabel: true },
-    xAxis:
-      effectiveChartMode === "stackedArea"
-        ? {
-            type: "category",
-            data: effectiveTpsValues,
-            boundaryGap: false,
-            name: "Effective TPS",
-            nameLocation: "middle",
-            nameGap: 28
-          }
-        : {
-            type: "value",
-            name: "Effective TPS",
-            nameLocation: "middle",
-            nameGap: 28,
-            min: firstEffectiveTps,
-            max: lastEffectiveTps
-          },
+    xAxis: {
+      type: "value",
+      name: "Effective TPS",
+      nameLocation: "middle",
+      nameGap: 28,
+      min: 0,
+      max: lastEffectiveTps,
+      axisLabel: {
+        formatter: formatXAxisLabel
+      }
+    },
     yAxis: {
       type: "value",
       name: unit,
@@ -467,7 +690,12 @@ export function MetricsExplorerPage() {
       <section className="panel chart-panel">
         <EChartsReact
           option={chartOption}
-          onEvents={{ legendselectchanged: handleLegendSelectChanged }}
+          onEvents={{
+            globalout: clearHighlightedSeries,
+            legendselectchanged: handleLegendSelectChanged,
+            mouseout: clearHighlightedSeries,
+            mouseover: handleChartMouseOver
+          }}
           notMerge
           style={{ height: 340, width: "100%" }}
         />

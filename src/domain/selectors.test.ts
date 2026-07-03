@@ -26,9 +26,8 @@ function pkg(measurements: MeasurementRecord[]): ImportedPackage {
     },
     topology: {
       unknownValues: "strict",
-      levels: ["application", "instance"],
-      topology: { application: { "mongo-a": ["mongo-a-0", "mongo-a-1"] } },
-      standalone: {}
+      layers: [{ key: "application", symbol: "triangle" }, { key: "instance" }],
+      nodes: [{ key: "mongo-a", layer: "application", color: "red", children: ["mongo-a-0", "mongo-a-1"] }]
     },
     saturation: { schemaVersion: 1, defaults: { saturatedWhen: [] }, overrides: [] },
     notes: { schemaVersion: 1, runs: [], comparisons: [] },

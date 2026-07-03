@@ -52,19 +52,27 @@ function hasCurrentMetrics(value: unknown): value is MetricsDocument {
 }
 
 function hasCurrentTopology(value: unknown): value is TopologyDocument {
-  if (!isRecord(value) || "groups" in value) return false;
-  if (!isStringArray(value.levels) || value.levels.length === 0) return false;
-  if (!isRecord(value.topology) || !isRecord(value.standalone)) return false;
-
-  for (const parentMap of Object.values(value.topology)) {
-    if (!isRecord(parentMap)) return false;
-    if (!Object.values(parentMap).every(isStringArray)) return false;
+  if (!isRecord(value) || "groups" in value || "levels" in value || "topology" in value || "standalone" in value) {
+    return false;
   }
-  for (const nodes of Object.values(value.standalone)) {
-    if (!isStringArray(nodes)) return false;
-  }
+  if (!Array.isArray(value.layers) || value.layers.length === 0 || !Array.isArray(value.nodes)) return false;
 
-  return true;
+  return (
+    value.layers.every(
+      (layer) =>
+        isRecord(layer) &&
+        isString(layer.key) &&
+        (layer.symbol === undefined || isString(layer.symbol))
+    ) &&
+    value.nodes.every(
+      (node) =>
+        isRecord(node) &&
+        isString(node.key) &&
+        isString(node.layer) &&
+        (node.color === undefined || node.color === null || isString(node.color)) &&
+        isStringArray(node.children)
+    )
+  );
 }
 
 function hasCurrentMeasurements(value: unknown): boolean {

@@ -3,6 +3,7 @@ import type {
   MetricDefinition,
   MetricsDocument,
   MeasurementRecord,
+  TopologyLayerDefinition,
   TopologyDocument,
   UnknownValuesMode,
   ValidationIssue
@@ -14,12 +15,16 @@ export interface TopologyNode {
   id: string;
   levelIndex: number;
   levelName: string;
+  symbol: string;
+  color?: string;
+  explicitColor?: string | null;
   parent?: string;
   children: string[];
   standalone: boolean;
 }
 
 export interface TopologyGraph {
+  layers: TopologyLayerDefinition[];
   levels: string[];
   unknownValues: UnknownValuesMode;
   nodes: Map<string, TopologyNode>;
@@ -307,65 +312,88 @@ export function validateMetricsDocument(metrics: MetricsDocument): string[] {
 
 export function buildTopologyGraph(topology: TopologyDocument): TopologyGraph {
   invariant(topology && typeof topology === "object", "topology.yaml must define a document.");
-  invariant(Array.isArray(topology.levels), "topology.yaml must define a levels array.");
-  invariant(topology.levels.length > 0, "topology.yaml must define at least one level.");
-  invariant(
-    topology.topology && typeof topology.topology === "object" && !Array.isArray(topology.topology),
-    "topology.yaml must define a topology map."
-  );
-  invariant(
-    topology.standalone && typeof topology.standalone === "object" && !Array.isArray(topology.standalone),
-    "topology.yaml must define a standalone map."
-  );
-  invariant(new Set(topology.levels).size === topology.levels.length, "Topology level names must be unique.");
+  invariant(Array.isArray(topology.layers), "topology.yaml must define a layers array.");
+  invariant(topology.layers.length > 0, "topology.yaml must define at least one layer.");
+  invariant(Array.isArray(topology.nodes), "topology.yaml must define a nodes array.");
+
+  const layers = topology.layers.map((layer, index) => {
+    invariant(layer && typeof layer === "object", `topology.layers[${index}] must define a layer object.`);
+    invariant(layer.key.trim().length > 0, `topology.layers[${index}].key must not be empty.`);
+    return {
+      key: layer.key,
+      symbol: normalizeTopologySymbol(layer.symbol)
+    };
+  });
+  const levels = layers.map((layer) => layer.key);
+  invariant(new Set(levels).size === levels.length, "Topology layer names must be unique.");
 
   const graph: TopologyGraph = {
-    levels: topology.levels,
+    layers,
+    levels,
     unknownValues: topology.unknownValues,
     nodes: new Map<string, TopologyNode>(),
     roots: []
   };
+  const definitions = new Map<string, TopologyDocument["nodes"][number]>();
 
-  for (const [levelName, parentMap] of Object.entries(topology.topology)) {
-    invariant(
-      parentMap && typeof parentMap === "object" && !Array.isArray(parentMap),
-      `topology.${levelName} must define a parent map.`
+  for (const [index, definition] of topology.nodes.entries()) {
+    invariant(definition && typeof definition === "object", `topology.nodes[${index}] must define a node object.`);
+    invariant(definition.key.trim().length > 0, `topology.nodes[${index}].key must not be empty.`);
+    invariant(!definitions.has(definition.key), `Node "${definition.key}" is declared more than once.`);
+    const levelIndex = levels.indexOf(definition.layer);
+    invariant(levelIndex >= 0, `Node "${definition.key}" references unknown layer "${definition.layer}".`);
+
+    const node = ensureNode(graph, definition.key, levelIndex, `topology.nodes.${definition.key}`);
+    const explicitColor = normalizeCssColor(definition.color);
+    if (explicitColor) {
+      node.explicitColor = explicitColor;
+      node.color = explicitColor;
+    }
+    definitions.set(definition.key, definition);
+  }
+
+  for (const definition of topology.nodes) {
+    const parent = ensureNode(
+      graph,
+      definition.key,
+      levels.indexOf(definition.layer),
+      `topology.nodes.${definition.key}`
     );
-    const levelIndex = topology.levels.indexOf(levelName);
-    invariant(levelIndex >= 0, `Topology references unknown level "${levelName}".`);
-    invariant(levelIndex < topology.levels.length - 1, `Level "${levelName}" is the last level and cannot define children.`);
+    const children = definition.children ?? [];
+    invariant(Array.isArray(children), `topology.nodes.${definition.key}.children must list child ids as an array.`);
+    invariant(new Set(children).size === children.length, `Node "${definition.key}" lists the same child more than once.`);
 
-    for (const [parentId, children] of Object.entries(parentMap)) {
-      const parent = ensureNode(graph, parentId, levelIndex, `topology.${levelName}.${parentId}`);
-      invariant(Array.isArray(children), `topology.${levelName}.${parentId} must list child ids as an array.`);
-      invariant(new Set(children).size === children.length, `Parent "${parentId}" lists the same child more than once.`);
+    if (children.length > 0) {
+      invariant(
+        parent.levelIndex < levels.length - 1,
+        `Node "${definition.key}" is on the last layer "${parent.levelName}" and cannot define children.`
+      );
+    }
 
-      for (const childId of children) {
-        invariant(childId !== parentId, `Node "${parentId}" cannot be its own child.`);
-        const child = ensureNode(graph, childId, levelIndex + 1, `child "${childId}" of "${parentId}"`);
-        invariant(!child.parent || child.parent === parentId, `Node "${childId}" belongs to both "${child.parent}" and "${parentId}".`);
-        child.parent = parentId;
-        if (!parent.children.includes(childId)) {
-          parent.children.push(childId);
-        }
+    for (const childId of children) {
+      invariant(childId.trim().length > 0, `Node "${definition.key}" contains an empty child id.`);
+      invariant(childId !== parent.id, `Node "${parent.id}" cannot be its own child.`);
+      const declaredChild = definitions.get(childId);
+      const childLevelIndex = declaredChild ? levels.indexOf(declaredChild.layer) : parent.levelIndex + 1;
+      invariant(
+        childLevelIndex === parent.levelIndex + 1,
+        `Child "${childId}" of "${parent.id}" must be declared at the next layer "${levels[parent.levelIndex + 1]}".`
+      );
+
+      const child = ensureNode(graph, childId, childLevelIndex, `child "${childId}" of "${parent.id}"`);
+      invariant(!child.parent || child.parent === parent.id, `Node "${childId}" belongs to both "${child.parent}" and "${parent.id}".`);
+      child.parent = parent.id;
+      if (!parent.children.includes(childId)) {
+        parent.children.push(childId);
       }
     }
   }
 
-  for (const [levelName, nodes] of Object.entries(topology.standalone)) {
-    const levelIndex = topology.levels.indexOf(levelName);
-    invariant(levelIndex >= 0, `Standalone references unknown level "${levelName}".`);
-    invariant(Array.isArray(nodes), `standalone.${levelName} must list node ids as an array.`);
-    invariant(new Set(nodes).size === nodes.length, `Standalone level "${levelName}" lists the same node more than once.`);
-
-    for (const nodeId of nodes) {
-      const node = ensureNode(graph, nodeId, levelIndex, `standalone.${levelName}`);
-      invariant(!node.parent && node.children.length === 0, `Standalone node "${nodeId}" must not have topology relations.`);
-      node.standalone = true;
-    }
+  for (const node of graph.nodes.values()) {
+    node.standalone = !node.parent && node.children.length === 0;
   }
-
   graph.roots = [...graph.nodes.values()].filter((node) => !node.parent).map((node) => node.id);
+  applyResolvedColors(graph);
   return graph;
 }
 
@@ -385,11 +413,142 @@ function ensureNode(graph: TopologyGraph, id: string, levelIndex: number, source
     id,
     levelIndex,
     levelName: graph.levels[levelIndex],
+    symbol: graph.layers[levelIndex]?.symbol ?? "circle",
     children: [],
     standalone: false
   };
   graph.nodes.set(id, node);
   return node;
+}
+
+function normalizeTopologySymbol(symbol: string | undefined): string {
+  const normalized = symbol?.trim().toLowerCase();
+  if (!normalized) return "circle";
+
+  const aliases: Record<string, string> = {
+    square: "rect",
+    rectangle: "rect",
+    rect: "rect",
+    circle: "circle",
+    triangle: "triangle",
+    diamond: "diamond",
+    pin: "pin",
+    arrow: "arrow",
+    none: "none"
+  };
+
+  return aliases[normalized] ?? normalized;
+}
+
+const namedColors: Record<string, string> = {
+  black: "#000000",
+  blue: "#0000ff",
+  cyan: "#00ffff",
+  gray: "#808080",
+  green: "#008000",
+  grey: "#808080",
+  magenta: "#ff00ff",
+  orange: "#ffa500",
+  purple: "#800080",
+  red: "#ff0000",
+  white: "#ffffff",
+  yellow: "#ffff00"
+};
+
+function normalizeCssColor(color: string | null | undefined): string | undefined {
+  const trimmed = color?.trim();
+  if (!trimmed) return undefined;
+  const lower = trimmed.toLowerCase();
+  if (namedColors[lower]) return namedColors[lower];
+  if (/^#[0-9a-f]{3}$/i.test(trimmed)) {
+    const [, red, green, blue] = trimmed;
+    return `#${red}${red}${green}${green}${blue}${blue}`.toLowerCase();
+  }
+  if (/^#[0-9a-f]{6}$/i.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+  return trimmed;
+}
+
+function applyResolvedColors(graph: TopologyGraph): void {
+  const visit = (nodeId: string, inheritedColor?: string) => {
+    const node = graph.nodes.get(nodeId);
+    if (!node) return;
+
+    if (!node.color && inheritedColor) {
+      node.color = inheritedColor;
+    }
+
+    const baseColor = node.color;
+    const childrenWithoutColor = node.children
+      .map((childId) => graph.nodes.get(childId))
+      .filter((child): child is TopologyNode => child !== undefined && !child.explicitColor);
+    const inheritedChildColors = baseColor ? distributeColorVariants(baseColor, childrenWithoutColor.length) : [];
+    let inheritedIndex = 0;
+
+    for (const childId of node.children) {
+      const child = graph.nodes.get(childId);
+      if (!child) continue;
+
+      if (!child.explicitColor && baseColor) {
+        child.color = inheritedChildColors[inheritedIndex] ?? baseColor;
+        inheritedIndex += 1;
+      }
+      visit(child.id, child.color ?? baseColor);
+    }
+  };
+
+  for (const rootId of graph.roots) {
+    visit(rootId, graph.nodes.get(rootId)?.color);
+  }
+}
+
+function distributeColorVariants(color: string, count: number): string[] {
+  if (count <= 0) return [];
+  if (count === 1) return [color];
+
+  return colorVariantFactors(count).map((factor) => mixColor(color, factor) ?? color);
+}
+
+function colorVariantFactors(count: number): number[] {
+  const maximumShift = 0.4;
+  if (count <= 1) return [0];
+
+  if (count % 2 === 0) {
+    const half = count / 2;
+    const dark = Array.from({ length: half }, (_, index) => -maximumShift + (index * maximumShift) / half);
+    const light = Array.from({ length: half }, (_, index) => ((index + 1) * maximumShift) / half);
+    return [...dark, ...light];
+  }
+
+  const half = Math.floor(count / 2);
+  const dark = Array.from({ length: half }, (_, index) => -maximumShift + (index * maximumShift) / half);
+  const light = Array.from({ length: half }, (_, index) => ((index + 1) * maximumShift) / half);
+  return [...dark, 0, ...light];
+}
+
+function mixColor(color: string, factor: number): string | undefined {
+  const rgb = parseHexColor(color);
+  if (!rgb) return undefined;
+
+  const target = factor < 0 ? 0 : 255;
+  const ratio = Math.abs(factor);
+  const mix = (value: number) => Math.round(value + (target - value) * ratio);
+  return toHexColor(mix(rgb.red), mix(rgb.green), mix(rgb.blue));
+}
+
+function parseHexColor(color: string): { red: number; green: number; blue: number } | undefined {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!match) return undefined;
+  return {
+    red: Number.parseInt(match[1].slice(0, 2), 16),
+    green: Number.parseInt(match[1].slice(2, 4), 16),
+    blue: Number.parseInt(match[1].slice(4, 6), 16)
+  };
+}
+
+function toHexColor(red: number, green: number, blue: number): string {
+  return `#${[red, green, blue].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
 }
 
 export function resolveTopologyMeasurements(

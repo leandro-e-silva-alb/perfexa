@@ -1,60 +1,95 @@
 unknownValues: strict
-levels:
-  - microservice
-  - application
-  - instance
-topology:
-  microservice:
-    usrv-a:
+layers:
+  - key: microservice
+    symbol: square
+  - key: application
+    symbol: triangle
+  - key: instance
+nodes:
+  - key: usrv-a
+    layer: microservice
+    color: "#ff0043"
+    children:
       - orch-a
       - rf-a
       - mongo-a
       - redis-a
-    usrv-b:
+  - key: usrv-b
+    layer: microservice
+    color: "#2563eb"
+    children:
       - part-b
       - rf-b
       - mongo-b
       - redis-b
-    usrv-c:
+  - key: usrv-c
+    layer: microservice
+    color: "#16a34a"
+    children:
       - part-c
       - rf-c
       - mongo-c
       - redis-c
-  application:
-    kafka:
+  - key: im
+    layer: microservice
+  - key: kafka
+    layer: application
+    color: "#7c3aed"
+    children:
       - kafka-0
       - kafka-1
       - kafka-2
-    orch-a:
+  - key: orch-a
+    layer: application
+    children:
       - orch-a-0
-    part-b:
+  - key: part-b
+    layer: application
+    children:
       - part-b-0
-    part-c:
+  - key: part-c
+    layer: application
+    children:
       - part-c-0
-    rf-a:
+  - key: rf-a
+    layer: application
+    children:
       - rf-a-0
-    rf-b:
+  - key: rf-b
+    layer: application
+    children:
       - rf-b-0
-    rf-c:
+  - key: rf-c
+    layer: application
+    children:
       - rf-c-0
-    mongo-a:
+  - key: mongo-a
+    layer: application
+    children:
       - mongo-a-0
       - mongo-a-1
-    mongo-b:
+  - key: mongo-b
+    layer: application
+    children:
       - mongo-b-0
       - mongo-b-1
-    mongo-c:
+  - key: mongo-c
+    layer: application
+    children:
       - mongo-c-0
       - mongo-c-1
-    redis-a:
+  - key: redis-a
+    layer: application
+    children:
       - redis-a-0
       - redis-a-1
-    redis-b:
+  - key: redis-b
+    layer: application
+    children:
       - redis-b-0
       - redis-b-1
-    redis-c:
+  - key: redis-c
+    layer: application
+    children:
       - redis-c-0
       - redis-c-1
-standalone:
-  microservice:
-    - im
