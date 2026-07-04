@@ -72,14 +72,14 @@ npm run tauri build
 
 ## Import Package Format
 
-Perfexa imports a folder containing headered CSV and YAML files. The fixture folders under `fixtures/` are the best examples:
+Perfexa imports either a folder or a `.zip` archive containing headered CSV and YAML files. The fixture folders under `fixtures/` are the best examples:
 
 ```text
 fixtures/perf-import
 fixtures/real-perf-import
 ```
 
-An import folder is expected to include:
+An import package is expected to include these files at the package root. Zip archives may put them directly at the archive root or inside one wrapping folder:
 
 ```text
 manifest.yaml
@@ -101,6 +101,12 @@ Key CSV identities:
 - Measurements use `run_id`, `metric_id`, `stat`, `instance_id`, and `value`.
 
 Topology is configured in `topology.yaml` using layers and nodes. Metrics are configured in `metrics.yaml` with aggregation rules such as `sum`, `average`, `ratio`, `percentage`, and `max`.
+
+## GitHub Import
+
+The desktop app can import the latest package from a private GitHub repository without storing the token in app storage. On the Import page, save a fine-grained GitHub token with `Contents: read`; Perfexa stores it in the OS credential store for the configured GitHub API host.
+
+Set the owner, repository, branch or ref, and nested package path. `Import latest` downloads the repository archive for that ref, reads the package from the configured nested path, validates it, and then lets you accept it into the local library.
 
 ## Useful Fixture Workflow
 

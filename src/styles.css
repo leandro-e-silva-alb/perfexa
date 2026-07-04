@@ -375,6 +375,29 @@ button:disabled {
   white-space: nowrap;
 }
 
+.github-import-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px 16px 12px;
+}
+
+.github-import-grid input {
+  width: 100%;
+  min-width: 0;
+}
+
+.github-import-wide {
+  grid-column: span 2;
+}
+
+.github-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
 .success-panel {
   display: flex;
   gap: 10px;
@@ -1484,6 +1507,10 @@ textarea {
 
   .import-status {
     grid-template-columns: 1fr;
+  }
+
+  .github-import-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .metric-strip,

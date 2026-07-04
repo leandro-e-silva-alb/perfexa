@@ -1,10 +1,38 @@
-import { AlertTriangle, CheckCircle2, FolderOpen, Loader2, Save, XCircle } from "lucide-react";
-import { useRef, useState } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  FileArchive,
+  FolderOpen,
+  Github,
+  KeyRound,
+  Loader2,
+  Save,
+  Trash2,
+  XCircle
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { validateImportSource } from "../../domain/importContract";
+import { evaluateFeatureAvailability } from "../../domain/featureRegistry";
 import type { ImportFileSource, ImportValidationResult, ValidationIssue } from "../../domain/types";
 import { DataTable } from "../../components/DataTable";
 import { StatusPill, type StatusTone } from "../../components/StatusPill";
-import { selectTauriFolderSource, sourceFromFileList } from "../importSources";
+import {
+  selectTauriFolderSource,
+  selectTauriZipSource,
+  sourceFromFileList,
+  sourceFromZipBytesAtPath,
+  sourceFromZipFile
+} from "../importSources";
+import {
+  clearGitHubToken,
+  defaultGitHubImportConfig,
+  downloadGitHubArchive,
+  githubCredentialAccount,
+  hasStoredGitHubToken,
+  isTauriRuntime,
+  saveGitHubToken,
+  type GitHubImportConfig
+} from "../githubImport";
 import { useAppState } from "../AppState";
 
 function featureTone(status: string): StatusTone {
@@ -79,6 +107,21 @@ function groupIssues(issues: ValidationIssue[]): IssueGroup[] {
   });
 }
 
+function failedImportResult(file: string, message: string): ImportValidationResult {
+  return {
+    report: {
+      valid: false,
+      errors: [{ severity: "error", file, message }],
+      warnings: [],
+      features: evaluateFeatureAvailability([], [])
+    }
+  };
+}
+
+function readableErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 function IssueList({ title, issues }: { title: string; issues: ValidationIssue[] }) {
   if (issues.length === 0) return null;
   const grouped = groupIssues(issues);
@@ -129,13 +172,60 @@ const contractFiles = [
   "raw/"
 ];
 
+const githubConfigStorageKey = "perfexa.githubImportConfig.v1";
+
+type TokenState = "checking" | "saved" | "missing" | "unavailable";
+
+function loadGitHubConfig(): GitHubImportConfig {
+  if (typeof localStorage === "undefined") return defaultGitHubImportConfig;
+  try {
+    const parsed = JSON.parse(localStorage.getItem(githubConfigStorageKey) ?? "{}") as Partial<GitHubImportConfig>;
+    return {
+      ...defaultGitHubImportConfig,
+      ...parsed
+    };
+  } catch {
+    return defaultGitHubImportConfig;
+  }
+}
+
 export function ImportPage() {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const zipInputRef = useRef<HTMLInputElement>(null);
   const { saveImportedPackage, storageReady } = useAppState();
   const [result, setResult] = useState<ImportValidationResult>();
-  const [selectedSource, setSelectedSource] = useState<string>("No folder selected");
+  const [selectedSource, setSelectedSource] = useState<string>("No package selected");
+  const [githubConfig, setGithubConfig] = useState<GitHubImportConfig>(() => loadGitHubConfig());
+  const [githubToken, setGithubToken] = useState("");
+  const [tokenState, setTokenState] = useState<TokenState>(isTauriRuntime() ? "checking" : "unavailable");
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  const githubAccount = useMemo(() => githubCredentialAccount(githubConfig.apiBaseUrl), [githubConfig.apiBaseUrl]);
+
+  useEffect(() => {
+    localStorage.setItem(githubConfigStorageKey, JSON.stringify(githubConfig));
+  }, [githubConfig]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isTauriRuntime()) {
+      setTokenState("unavailable");
+      return;
+    }
+
+    setTokenState("checking");
+    hasStoredGitHubToken(githubAccount)
+      .then((hasToken) => {
+        if (!cancelled) setTokenState(hasToken ? "saved" : "missing");
+      })
+      .catch(() => {
+        if (!cancelled) setTokenState("missing");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [githubAccount]);
 
   async function runValidation(source: ImportFileSource) {
     setBusy(true);
@@ -153,12 +243,108 @@ export function ImportPage() {
       await runValidation(tauriSource);
       return;
     }
-    inputRef.current?.click();
+    folderInputRef.current?.click();
+  }
+
+  async function handleSelectZip() {
+    try {
+      const tauriSource = await selectTauriZipSource();
+      if (tauriSource) {
+        await runValidation(tauriSource);
+        return;
+      }
+      zipInputRef.current?.click();
+    } catch (error) {
+      setSelectedSource("Zip archive");
+      setResult(failedImportResult("zip", `Unable to read zip archive: ${readableErrorMessage(error, "Invalid zip.")}`));
+    }
   }
 
   async function handleFileInput(files: FileList | null) {
     if (!files || files.length === 0) return;
     await runValidation(sourceFromFileList(files));
+  }
+
+  async function handleZipFileInput(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    setBusy(true);
+    setSelectedSource(file.name);
+    try {
+      const source = await sourceFromZipFile(file);
+      setResult(await validateImportSource(source));
+    } catch (error) {
+      setResult(
+        failedImportResult(file.name, `Unable to read zip archive: ${readableErrorMessage(error, "Invalid zip.")}`)
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function updateGitHubConfig<K extends keyof GitHubImportConfig>(key: K, value: GitHubImportConfig[K]) {
+    setGithubConfig((current) => ({
+      ...current,
+      [key]: value
+    }));
+  }
+
+  async function handleSaveGitHubToken() {
+    setBusy(true);
+    try {
+      await saveGitHubToken(githubAccount, githubToken);
+      setGithubToken("");
+      setTokenState("saved");
+    } catch (error) {
+      setResult(
+        failedImportResult(
+          "github",
+          `Unable to save GitHub token: ${readableErrorMessage(error, "Credential storage failed.")}`
+        )
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleClearGitHubToken() {
+    setBusy(true);
+    try {
+      await clearGitHubToken(githubAccount);
+      setGithubToken("");
+      setTokenState("missing");
+    } catch (error) {
+      setResult(
+        failedImportResult(
+          "github",
+          `Unable to clear GitHub token: ${readableErrorMessage(error, "Credential removal failed.")}`
+        )
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleImportFromGitHub() {
+    setBusy(true);
+    const label = `${githubConfig.owner}/${githubConfig.repo}/${githubConfig.refName}`;
+    setSelectedSource(githubConfig.packagePath ? `${label}:${githubConfig.packagePath}` : label);
+    try {
+      const archive = await downloadGitHubArchive(githubAccount, githubConfig);
+      const source = await sourceFromZipBytesAtPath(
+        archive.archiveName,
+        new Uint8Array(archive.bytes),
+        githubConfig.packagePath,
+        `${archive.sourceLabel}:${githubConfig.packagePath || "/"}`
+      );
+      setResult(await validateImportSource(source));
+    } catch (error) {
+      setResult(
+        failedImportResult("github", `Unable to import from GitHub: ${readableErrorMessage(error, "Import failed.")}`)
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleSave() {
@@ -183,6 +369,10 @@ export function ImportPage() {
             {busy ? <Loader2 className="spin" size={17} /> : <FolderOpen size={17} />}
             {busy ? "Validating" : "Select folder"}
           </button>
+          <button className="button" type="button" onClick={handleSelectZip} disabled={busy}>
+            {busy ? <Loader2 className="spin" size={17} /> : <FileArchive size={17} />}
+            {busy ? "Validating" : "Select zip"}
+          </button>
           <button
             className="button"
             type="button"
@@ -194,18 +384,134 @@ export function ImportPage() {
           </button>
         </div>
         <input
-          ref={inputRef}
+          ref={folderInputRef}
           type="file"
           multiple
           hidden
           onChange={(event) => handleFileInput(event.target.files)}
           {...{ webkitdirectory: "", directory: "" }}
         />
+        <input
+          ref={zipInputRef}
+          type="file"
+          accept=".zip,application/zip,application/x-zip-compressed"
+          hidden
+          onChange={(event) => handleZipFileInput(event.target.files)}
+        />
       </header>
+
+      <section className="panel">
+        <div className="panel-title">
+          <Github size={18} />
+          <h2>GitHub import</h2>
+          <StatusPill tone={tokenState === "saved" ? "ok" : tokenState === "checking" ? "neutral" : "warn"}>
+            {tokenState === "saved"
+              ? "Token saved"
+              : tokenState === "checking"
+                ? "Checking token"
+                : tokenState === "unavailable"
+                  ? "Desktop only"
+                  : "Token needed"}
+          </StatusPill>
+        </div>
+        <div className="github-import-grid">
+          <label>
+            <span className="label">API URL</span>
+            <input
+              className="input"
+              value={githubConfig.apiBaseUrl}
+              onChange={(event) => updateGitHubConfig("apiBaseUrl", event.target.value)}
+              placeholder="https://api.github.com"
+            />
+          </label>
+          <label>
+            <span className="label">Owner</span>
+            <input
+              className="input"
+              value={githubConfig.owner}
+              onChange={(event) => updateGitHubConfig("owner", event.target.value)}
+              placeholder="organization"
+            />
+          </label>
+          <label>
+            <span className="label">Repository</span>
+            <input
+              className="input"
+              value={githubConfig.repo}
+              onChange={(event) => updateGitHubConfig("repo", event.target.value)}
+              placeholder="repository"
+            />
+          </label>
+          <label>
+            <span className="label">Ref</span>
+            <input
+              className="input"
+              value={githubConfig.refName}
+              onChange={(event) => updateGitHubConfig("refName", event.target.value)}
+              placeholder="main"
+            />
+          </label>
+          <label className="github-import-wide">
+            <span className="label">Package path</span>
+            <input
+              className="input"
+              value={githubConfig.packagePath}
+              onChange={(event) => updateGitHubConfig("packagePath", event.target.value)}
+              placeholder="reports/latest/perf-import"
+            />
+          </label>
+          <label className="github-import-wide">
+            <span className="label">Token</span>
+            <input
+              className="input"
+              type="password"
+              value={githubToken}
+              onChange={(event) => setGithubToken(event.target.value)}
+              placeholder="Fine-grained token with Contents: read"
+              disabled={tokenState === "unavailable"}
+            />
+          </label>
+        </div>
+        <div className="github-import-actions">
+          <button
+            className="button"
+            type="button"
+            onClick={handleSaveGitHubToken}
+            disabled={busy || tokenState === "unavailable" || githubToken.trim().length === 0}
+          >
+            {busy ? <Loader2 className="spin" size={17} /> : <KeyRound size={17} />}
+            Save token
+          </button>
+          <button
+            className="button"
+            type="button"
+            onClick={handleClearGitHubToken}
+            disabled={busy || tokenState !== "saved"}
+          >
+            <Trash2 size={17} />
+            Clear token
+          </button>
+          <button
+            className="button button-primary"
+            type="button"
+            onClick={handleImportFromGitHub}
+            disabled={
+              busy ||
+              tokenState !== "saved" ||
+              githubConfig.owner.trim().length === 0 ||
+              githubConfig.repo.trim().length === 0 ||
+              githubConfig.refName.trim().length === 0
+            }
+          >
+            {busy ? <Loader2 className="spin" size={17} /> : <Github size={17} />}
+            Import latest
+          </button>
+        </div>
+      </section>
 
       <section className="panel import-status">
         <div>
-          <span className="label">Selected folder</span>
+          <span className="label">Selected package</span>
           <strong>{selectedSource}</strong>
         </div>
         <div>
