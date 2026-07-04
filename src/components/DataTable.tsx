@@ -65,12 +65,11 @@ export function DataTable<TData>({
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
                   <th key={header.id}>
-                    {header.isPlaceholder ? null : (
+                    {header.isPlaceholder ? null : header.column.getCanSort() ? (
                       <button
                         className="th-button"
                         type="button"
                         onClick={header.column.getToggleSortingHandler()}
-                        disabled={!header.column.getCanSort()}
                       >
                         {flexRender(header.column.columnDef.header, header.getContext())}
                         <span className="sort-mark">
@@ -78,9 +77,14 @@ export function DataTable<TData>({
                             ? "A-Z"
                             : header.column.getIsSorted() === "desc"
                               ? "Z-A"
-                              : ""}
+                            : ""}
                         </span>
                       </button>
+                    ) : (
+                      <span className="th-button th-static">
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        <span className="sort-mark" />
+                      </span>
                     )}
                   </th>
                 ))}

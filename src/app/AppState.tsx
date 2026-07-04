@@ -12,7 +12,9 @@ interface AppStateValue {
   view: AppView;
   isBusy: boolean;
   busyLabel: string;
+  comparisonTestKeys: string[];
   setView(view: AppView): void;
+  setComparisonTestKeys(testKeys: string[]): void;
   selectPackage(id: string): void;
   saveImportedPackage(pkg: ImportedPackage): Promise<void>;
   updateActivePackageNotes(notes: NotesDocument): Promise<void>;
@@ -30,6 +32,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [busyLabel, setBusyLabel] = useState("Starting");
   const [navigationBusy, setNavigationBusy] = useState(false);
   const [operationBusy, setOperationBusy] = useState(true);
+  const [comparisonTestKeys, setComparisonTestKeysState] = useState<string[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -82,6 +85,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const loaded = await storage.listPackages();
       setPackages(loaded);
       setActivePackageId(pkg.id);
+      setComparisonTestKeysState([]);
       setCurrentView("overview");
     } finally {
       setOperationBusy(false);
@@ -109,10 +113,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     window.setTimeout(() => setNavigationBusy(false), 220);
   }
 
+  function setComparisonTestKeys(testKeys: string[]) {
+    setComparisonTestKeysState([...new Set(testKeys)]);
+  }
+
   function selectPackage(id: string) {
     setBusyLabel("Opening package");
     setNavigationBusy(true);
     setActivePackageId(id);
+    setComparisonTestKeysState([]);
     setCurrentView("overview");
     window.setTimeout(() => setNavigationBusy(false), 220);
   }
@@ -127,7 +136,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     view,
     isBusy,
     busyLabel,
+    comparisonTestKeys,
     setView,
+    setComparisonTestKeys,
     selectPackage,
     saveImportedPackage,
     updateActivePackageNotes,

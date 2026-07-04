@@ -1,0 +1,127 @@
+# Perfexa
+
+Perfexa is a local performance analysis app for importing benchmark result packages, exploring metrics by topology level, checking saturation, comparing runs, and fitting CPU regressions per test.
+
+It is built with React, Vite, TypeScript, ECharts, and Tauri.
+
+## Requirements
+
+- Node.js and npm
+- Rust toolchain, required for the Tauri desktop app
+- Windows WebView2 runtime, normally already installed on modern Windows
+
+## Getting Started
+
+Install dependencies:
+
+```powershell
+npm install
+```
+
+Run the web app in a browser:
+
+```powershell
+npm run dev
+```
+
+Then open:
+
+```text
+http://127.0.0.1:1420
+```
+
+Run the app as a native Windows desktop window:
+
+```powershell
+npm run tauri dev
+```
+
+The Tauri dev command starts the Vite dev server automatically and opens the Perfexa window.
+
+## Important Commands
+
+Run tests:
+
+```powershell
+npm test
+```
+
+Build the frontend:
+
+```powershell
+npm run build
+```
+
+Preview the production frontend build:
+
+```powershell
+npm run preview
+```
+
+Run Tauri commands:
+
+```powershell
+npm run tauri -- <command>
+```
+
+Build the desktop app bundle:
+
+```powershell
+npm run tauri build
+```
+
+## Import Package Format
+
+Perfexa imports a folder containing headered CSV and YAML files. The fixture folders under `fixtures/` are the best examples:
+
+```text
+fixtures/perf-import
+fixtures/real-perf-import
+```
+
+An import folder is expected to include:
+
+```text
+manifest.yaml
+metrics.yaml
+topology.yaml
+saturation.yaml
+notes.yaml
+scenarios.csv
+configs.csv
+tests.csv
+runs.csv
+measurements.csv
+```
+
+Key CSV identities:
+
+- Tests are identified by `scenario_id`, `config_id`, and `sequence_id`.
+- Runs belong to tests and include `run_id`, `target_tps`, timing, and duration data.
+- Measurements use `run_id`, `metric_id`, `stat`, `instance_id`, and `value`.
+
+Topology is configured in `topology.yaml` using layers and nodes. Metrics are configured in `metrics.yaml` with aggregation rules such as `sum`, `average`, `ratio`, `percentage`, and `max`.
+
+## Useful Fixture Workflow
+
+Start the app:
+
+```powershell
+npm run tauri dev
+```
+
+Use the Import page and select one of the fixture folders:
+
+```text
+fixtures/perf-import
+fixtures/real-perf-import
+```
+
+After import, use the Library, Overview, Metrics, Regression, and Comparisons pages to inspect the package.
+
+## Notes
+
+- The desktop app stores imported packages in the local Tauri SQLite database.
+- The browser dev app falls back to browser storage when Tauri APIs are unavailable.
+- CPU regression requires a `cpu` metric in `metrics.yaml`.
+- Topology unknown values are controlled by `unknownValues` in `topology.yaml`: `strict`, `permissive`, or `ignore`.

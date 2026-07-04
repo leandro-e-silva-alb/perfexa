@@ -8,6 +8,15 @@ export interface RegressionPoint {
   cpuMcpu: number;
 }
 
+export interface RegressionChartPoint extends RegressionPoint {
+  runId: string;
+  targetTps: number;
+  fitted: boolean;
+  saturated: boolean;
+  latencyAvg?: number;
+  maxThrottling?: number;
+}
+
 export interface HyperbolicFit {
   idle: number;
   marginalCpu: number;
@@ -34,6 +43,10 @@ export interface CpuRegressionRow {
   totalPoints: number;
 }
 
+export interface CpuRegressionAnalysis extends CpuRegressionRow {
+  points: RegressionChartPoint[];
+}
+
 interface RegressionGroup {
   testKey: string;
   scenarioId: string;
@@ -42,6 +55,7 @@ interface RegressionGroup {
   sequenceId: number;
   exagonVersion: string;
   fittedPoints: RegressionPoint[];
+  points: RegressionChartPoint[];
   totalPoints: number;
 }
 
@@ -97,6 +111,50 @@ function buildCpuByRun(pkg: ImportedPackage): Map<string, number> {
   return totals;
 }
 
+function buildRunLevelMeasurementByRun(
+  measurements: MeasurementRecord[],
+  metricId: string,
+  stat: string
+): Map<string, number> {
+  const result = new Map<string, number>();
+
+  for (const measurement of measurements) {
+    if (
+      measurement.metric_id === metricId &&
+      measurement.stat === stat &&
+      measurement.instance_id === "" &&
+      Number.isFinite(measurement.value)
+    ) {
+      result.set(measurement.run_id, measurement.value);
+    }
+  }
+
+  return result;
+}
+
+function buildMaxThrottlingByRun(pkg: ImportedPackage): Map<string, number> {
+  const result = new Map<string, number>();
+  const topLevel = buildTopologyGraph(pkg.topology).levels[0];
+  const projected =
+    topLevel && pkg.metrics.metrics.throttling
+      ? resolveTopologyMeasurements(pkg.topology, pkg.metrics, pkg.measurements, "throttling", "max", topLevel).projected
+      : [];
+  const source =
+    projected.length > 0
+      ? projected
+      : pkg.measurements.filter((measurement) => measurement.metric_id === "throttling" && measurement.stat === "max");
+
+  for (const measurement of source) {
+    if (!Number.isFinite(measurement.value)) {
+      continue;
+    }
+
+    result.set(measurement.run_id, Math.max(result.get(measurement.run_id) ?? Number.NEGATIVE_INFINITY, measurement.value));
+  }
+
+  return result;
+}
+
 function createGroup(pkg: ImportedPackage, test: TestRecord | RunRecord): RegressionGroup {
   const config = pkg.configs.find((entry) => entry.config_id === test.config_id);
 
@@ -108,14 +166,17 @@ function createGroup(pkg: ImportedPackage, test: TestRecord | RunRecord): Regres
     sequenceId: test.sequence_id,
     exagonVersion: config?.exagon_ver ?? test.config_id,
     fittedPoints: [],
+    points: [],
     totalPoints: 0
   };
 }
 
-export function buildCpuRegressionRows(pkg: ImportedPackage): CpuRegressionRow[] {
+export function buildCpuRegressionAnalyses(pkg: ImportedPackage): CpuRegressionAnalysis[] {
   const groups = new Map<string, RegressionGroup>();
   const effectiveTpsByRun = buildEffectiveTpsByRun(pkg.measurements);
   const cpuByRun = buildCpuByRun(pkg);
+  const latencyAvgByRun = buildRunLevelMeasurementByRun(pkg.measurements, "latency", "avg");
+  const maxThrottlingByRun = buildMaxThrottlingByRun(pkg);
   const saturationByRun = evaluateSaturationByRun(pkg);
 
   for (const test of pkg.tests) {
@@ -134,8 +195,21 @@ export function buildCpuRegressionRows(pkg: ImportedPackage): CpuRegressionRow[]
     }
 
     group.totalPoints += 1;
-    if (!saturationByRun[run.run_id]?.saturated) {
-      group.fittedPoints.push({ effectiveTps, cpuMcpu });
+    const saturated = Boolean(saturationByRun[run.run_id]?.saturated);
+    const point: RegressionChartPoint = {
+      runId: run.run_id,
+      targetTps: run.target_tps,
+      effectiveTps,
+      cpuMcpu,
+      fitted: !saturated,
+      saturated,
+      latencyAvg: latencyAvgByRun.get(run.run_id),
+      maxThrottling: maxThrottlingByRun.get(run.run_id)
+    };
+
+    group.points.push(point);
+    if (point.fitted) {
+      group.fittedPoints.push(point);
     }
   }
 
@@ -156,7 +230,10 @@ export function buildCpuRegressionRows(pkg: ImportedPackage): CpuRegressionRow[]
         rSquared: fit?.rSquared ?? null,
         rmse: fit?.rmse ?? null,
         fittedPoints: group.fittedPoints.length,
-        totalPoints: group.totalPoints
+        totalPoints: group.totalPoints,
+        points: group.points.sort(
+          (left, right) => left.effectiveTps - right.effectiveTps || left.runId.localeCompare(right.runId)
+        )
       };
     })
     .sort(
@@ -166,6 +243,10 @@ export function buildCpuRegressionRows(pkg: ImportedPackage): CpuRegressionRow[]
         left.configId.localeCompare(right.configId, undefined, { numeric: true }) ||
         left.sequenceId - right.sequenceId
     );
+}
+
+export function buildCpuRegressionRows(pkg: ImportedPackage): CpuRegressionRow[] {
+  return buildCpuRegressionAnalyses(pkg).map(({ points, ...row }) => row);
 }
 
 export function calculateHyperbolicFit(points: RegressionPoint[]): HyperbolicFit | null {
@@ -380,7 +461,7 @@ function solveLinearSystem(matrix: number[][], vector: number[]): number[] | nul
   return result.every((value) => Number.isFinite(value)) ? result : null;
 }
 
-function predictCpu(
+export function predictCpu(
   effectiveTps: number,
   idle: number,
   marginalCpu: number,

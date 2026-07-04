@@ -6,13 +6,6 @@ defaults:
       operator: ">"
       value: 20
 overrides:
-  - run_id: "202605202011"
+  - run_id: "202605210458"
     saturated: true
-    reason: "Imported from source Excel Saturated column."
-  - run_id: "202605202229"
-    saturated: true
-    reason: "Imported from source Excel Saturated column."
-  - run_id: "202605202034"
-    saturated: true
-    reason: "Imported from source Excel Saturated column."
-
+    reason: "Kafka CPU decreased oddly."

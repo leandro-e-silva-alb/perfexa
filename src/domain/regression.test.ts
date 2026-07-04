@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { validateImportSource } from "./importContract";
-import { buildCpuRegressionRows } from "./regression";
+import { buildCpuRegressionAnalyses, buildCpuRegressionRows } from "./regression";
 import type { ImportFileSource } from "./types";
 
 function fixtureSource(rootName: string): ImportFileSource {
@@ -53,5 +53,18 @@ describe("CPU regression", () => {
     expect(cacheNone).toBeDefined();
     expect(cacheNone?.fittedPoints).toBe(8);
     expect(cacheNone?.totalPoints).toBe(11);
+  });
+
+  it("exposes chart points with fit membership and comparison metrics", async () => {
+    const result = await validateImportSource(fixtureSource("real-perf-import"));
+    const rows = buildCpuRegressionAnalyses(result.package!);
+    const cacheNone = rows.find((row) => row.scenarioId === "rwro_none");
+
+    expect(cacheNone).toBeDefined();
+    expect(cacheNone?.points).toHaveLength(cacheNone?.totalPoints ?? 0);
+    expect(cacheNone?.points.filter((point) => point.fitted)).toHaveLength(cacheNone?.fittedPoints ?? 0);
+    expect(cacheNone?.points.some((point) => point.saturated)).toBe(true);
+    expect(cacheNone?.points.every((point) => point.latencyAvg !== undefined)).toBe(true);
+    expect(cacheNone?.points.some((point) => point.maxThrottling !== undefined)).toBe(true);
   });
 });

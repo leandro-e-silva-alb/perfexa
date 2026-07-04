@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { useMemo } from "react";
+import { GitCompare } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { DataTable } from "../../components/DataTable";
 import { StatusPill } from "../../components/StatusPill";
 import { buildCpuRegressionRows, type CpuRegressionRow } from "../../domain/regression";
@@ -25,8 +26,13 @@ function average(values: number[]): number | null {
 }
 
 export function RegressionPage() {
-  const { activePackage, setView } = useAppState();
+  const { activePackage, setComparisonTestKeys, setView } = useAppState();
+  const [selectedTestKeys, setSelectedTestKeys] = useState<string[]>([]);
   const rows = useMemo(() => (activePackage ? buildCpuRegressionRows(activePackage) : []), [activePackage]);
+
+  useEffect(() => {
+    setSelectedTestKeys([]);
+  }, [activePackage?.id]);
 
   if (!activePackage) {
     return (
@@ -43,8 +49,44 @@ export function RegressionPage() {
   const fittedPoints = rows.reduce((sum, row) => sum + row.fittedPoints, 0);
   const totalPoints = rows.reduce((sum, row) => sum + row.totalPoints, 0);
   const averageR2 = average(fittedRows.map((row) => row.rSquared).filter((value): value is number => value !== null));
+  const selectedSet = new Set(selectedTestKeys);
+
+  function toggleRow(testKey: string) {
+    setSelectedTestKeys((current) =>
+      current.includes(testKey) ? current.filter((key) => key !== testKey) : [...current, testKey]
+    );
+  }
+
+  function toggleAllRows() {
+    setSelectedTestKeys((current) => (current.length === rows.length ? [] : rows.map((row) => row.testKey)));
+  }
+
+  function compareSelectedRows() {
+    setComparisonTestKeys(selectedTestKeys);
+    setView("comparisons");
+  }
 
   const columns: ColumnDef<CpuRegressionRow>[] = [
+    {
+      id: "selection",
+      header: () => (
+        <input
+          aria-label="Select all regression rows"
+          checked={rows.length > 0 && selectedTestKeys.length === rows.length}
+          type="checkbox"
+          onChange={toggleAllRows}
+        />
+      ),
+      cell: ({ row }) => (
+        <input
+          aria-label={`Select ${row.original.testKey}`}
+          checked={selectedSet.has(row.original.testKey)}
+          type="checkbox"
+          onChange={() => toggleRow(row.original.testKey)}
+        />
+      ),
+      enableSorting: false
+    },
     { id: "scenario", header: "Scenario", accessorKey: "scenario" },
     { id: "sequenceId", header: "Sequence ID", accessorKey: "sequenceId" },
     { id: "exagonVersion", header: "Exagon_ver", accessorKey: "exagonVersion" },
@@ -89,9 +131,20 @@ export function RegressionPage() {
           <h1>CPU over TPS</h1>
           <span className="header-meta">{activePackage.name}</span>
         </div>
-        <StatusPill tone={fittedRows.length > 0 ? "ok" : "warn"}>
-          {fittedRows.length} of {rows.length} fitted
-        </StatusPill>
+        <div className="header-actions">
+          <button
+            className="button"
+            type="button"
+            onClick={compareSelectedRows}
+            disabled={selectedTestKeys.length === 0}
+          >
+            <GitCompare size={16} aria-hidden="true" />
+            Compare selected
+          </button>
+          <StatusPill tone={fittedRows.length > 0 ? "ok" : "warn"}>
+            {fittedRows.length} of {rows.length} fitted
+          </StatusPill>
+        </div>
       </header>
 
       <section className="metric-strip">
