@@ -3,6 +3,7 @@ import type {
   MetricAggregation,
   MetricsDocument,
   NotesDocument,
+  ScenarioHelpDocument,
   SaturationDocument,
   TopologyDocument
 } from "../domain/types";
@@ -88,6 +89,31 @@ function hasCurrentMeasurements(value: unknown): boolean {
   });
 }
 
+function hasCurrentScenarioHelp(value: unknown): value is ScenarioHelpDocument {
+  if (!isRecord(value) || value.schemaVersion !== 1 || !isRecord(value.scenarios)) return false;
+
+  return Object.values(value.scenarios).every((help) => {
+    if (!isRecord(help)) return false;
+    return (
+      isString(help.title) &&
+      isString(help.body) &&
+      isStringArray(help.microservices) &&
+      isStringArray(help.sagas) &&
+      isStringArray(help.activities) &&
+      isStringArray(help.blOperations) &&
+      Array.isArray(help.images) &&
+      help.images.every(
+        (image) =>
+          isRecord(image) &&
+          isString(image.path) &&
+          (image.caption === undefined || isString(image.caption)) &&
+          isString(image.mimeType) &&
+          isString(image.dataUrl)
+      )
+    );
+  });
+}
+
 function hasCurrentSaturation(value: unknown): value is SaturationDocument {
   if (!isRecord(value) || !isRecord(value.defaults) || !Array.isArray(value.defaults.saturatedWhen)) return false;
 
@@ -118,7 +144,8 @@ export function isCurrentPackage(value: unknown): value is ImportedPackage {
     hasCurrentMetrics(value.metrics) &&
     hasCurrentTopology(value.topology) &&
     hasCurrentSaturation(value.saturation) &&
-    hasCurrentMeasurements(value.measurements)
+    hasCurrentMeasurements(value.measurements) &&
+    (value.scenarioHelp === undefined || hasCurrentScenarioHelp(value.scenarioHelp))
   );
 }
 

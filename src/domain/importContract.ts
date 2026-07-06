@@ -11,6 +11,7 @@ import {
   notesDocumentSchema,
   runRecordSchema,
   scenarioRecordSchema,
+  scenarioHelpDocumentSchema,
   saturationDocumentSchema,
   testRecordSchema,
   topologyDocumentSchema
@@ -27,6 +28,8 @@ import type {
   MetricsDocument,
   NotesDocument,
   RunRecord,
+  ScenarioHelpDocument,
+  ScenarioHelpEntry,
   ScenarioRecord,
   SaturationDocument,
   TestRecord,
@@ -46,6 +49,8 @@ const requiredTextFiles = [
   "saturation.yaml",
   "notes.yaml"
 ];
+
+const optionalScenarioHelpFile = "scenario-help.yaml";
 
 function issue(severity: "error" | "warning", message: string, file?: string, path?: string): ValidationIssue {
   return { severity, message, file, path };
@@ -118,6 +123,97 @@ function addDuplicateErrors<T>(
 
 function rowWord(count: number): string {
   return count === 1 ? "row" : "rows";
+}
+
+function normalizeAssetPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/^\/+/, "").replace(/^\.\//, "");
+}
+
+function isRelativeAssetPath(path: string): boolean {
+  const normalized = normalizeAssetPath(path);
+  return normalized.length > 0 && !/^[a-z]+:/i.test(path) && !normalized.startsWith("../") && !normalized.includes("/../");
+}
+
+function mimeTypeForPath(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".gif")) return "image/gif";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".svg")) return "image/svg+xml";
+  return "application/octet-stream";
+}
+
+function asUint8Array(bytes: Uint8Array | ArrayLike<number>): Uint8Array {
+  return bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
+}
+
+function bytesToBase64(input: Uint8Array | ArrayLike<number>): string {
+  const bytes = asUint8Array(input);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+async function readOptionalText(source: ImportFileSource, relativePath: string): Promise<string | undefined> {
+  try {
+    return await source.readText(relativePath);
+  } catch {
+    return undefined;
+  }
+}
+
+async function loadScenarioHelpAssets(
+  scenarioHelp: ScenarioHelpDocument,
+  scenarios: ScenarioRecord[],
+  source: ImportFileSource,
+  errors: ValidationIssue[]
+): Promise<ScenarioHelpDocument> {
+  const scenarioIds = new Set(scenarios.map((scenario) => scenario.scenario_id));
+  const hydratedScenarios: Record<string, ScenarioHelpEntry> = {};
+
+  for (const [scenarioId, help] of Object.entries(scenarioHelp.scenarios)) {
+    if (!scenarioIds.has(scenarioId)) {
+      errors.push(issue("error", `scenario-help.yaml references unknown scenario_id "${scenarioId}".`, optionalScenarioHelpFile));
+    }
+
+    const images: ScenarioHelpEntry["images"] = [];
+    for (const image of help.images) {
+      const normalizedPath = normalizeAssetPath(image.path);
+      if (!isRelativeAssetPath(image.path)) {
+        errors.push(issue("error", `Scenario help image path "${image.path}" must be relative to the package root.`, optionalScenarioHelpFile));
+        continue;
+      }
+
+      try {
+        const bytes = await source.readBytes(normalizedPath);
+        const mimeType = mimeTypeForPath(normalizedPath);
+        images.push({
+          ...image,
+          path: normalizedPath,
+          mimeType,
+          dataUrl: `data:${mimeType};base64,${bytesToBase64(bytes)}`
+        });
+      } catch (error) {
+        const errorText = error instanceof Error ? error.message : String(error);
+        errors.push(
+          issue(
+            "error",
+            `Unable to read scenario help image "${normalizedPath}": ${errorText}`,
+            optionalScenarioHelpFile
+          )
+        );
+      }
+    }
+
+    hydratedScenarios[scenarioId] = { ...help, images };
+  }
+
+  return { ...scenarioHelp, scenarios: hydratedScenarios };
 }
 
 function addGroupedIssues<T>(
@@ -388,6 +484,15 @@ export async function validateImportSource(source: ImportFileSource): Promise<Im
     errors
   );
   const notes = parseYamlDocument<NotesDocument>("notes.yaml", texts.get("notes.yaml") ?? "", notesDocumentSchema, errors);
+  const scenarioHelpText = await readOptionalText(source, optionalScenarioHelpFile);
+  const parsedScenarioHelp = scenarioHelpText !== undefined
+    ? parseYamlDocument<ScenarioHelpDocument>(
+        optionalScenarioHelpFile,
+        scenarioHelpText,
+        scenarioHelpDocumentSchema,
+        errors
+      )
+    : undefined;
 
   const runsResult = parseCsvRows<RunRecord>("runs.csv", texts.get("runs.csv") ?? "", csvColumns.runs, runRecordSchema);
   const testsResult = parseCsvRows<TestRecord>(
@@ -460,6 +565,10 @@ export async function validateImportSource(source: ImportFileSource): Promise<Im
     });
   }
 
+  const scenarioHelp = parsedScenarioHelp
+    ? await loadScenarioHelpAssets(parsedScenarioHelp, scenariosResult.rows, source, errors)
+    : undefined;
+
   const features = evaluateFeatureAvailability(runsResult.rows, measurementsResult.rows);
   const report: ImportValidationReport = {
     valid: errors.length === 0,
@@ -482,6 +591,7 @@ export async function validateImportSource(source: ImportFileSource): Promise<Im
     topology,
     saturation,
     notes,
+    scenarioHelp,
     scenarios: scenariosResult.rows,
     configs: configsResult.rows,
     tests: testsResult.rows,

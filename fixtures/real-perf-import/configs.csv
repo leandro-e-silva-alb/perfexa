@@ -1,5 +1,5 @@
-﻿"config_id","exagon_ver","components_ver"
-"cfg-77476a3e","dev-6.3.0-SNAPSHOT","usrv-a:3.13.0-rc528,usrv-b:3.13.0-rc133,usrv-c:3.13.0-rc73"
-"cfg-672fd4a2","dev-6.2.0-SNAPSHOT","usrv-a:3.12.0-rc506,usrv-b:3.12.0-rc112,usrv-c:3.12.0-rc52"
-"cfg-e8c9c6d6","dev-6.3.0-SNAPSHOT","usrv-a:3.13.0-rc523,usrv-b:3.13.0-rc127,usrv-c:3.13.0-rc67"
-
+config_id,exagon_ver,components_ver
+cfg-77476a3e,dev-6.3.0-SNAPSHOT,"usrv-a:3.13.0-rc528,usrv-b:3.13.0-rc133,usrv-c:3.13.0-rc73"
+cfg-672fd4a2,dev-6.2.0-SNAPSHOT,"usrv-a:3.12.0-rc506,usrv-b:3.12.0-rc112,usrv-c:3.12.0-rc52"
+cfg-e8c9c6d6,dev-6.3.0-SNAPSHOT,"usrv-a:3.13.0-rc523,usrv-b:3.13.0-rc127,usrv-c:3.13.0-rc67"
+cfg-cd4150b9,6.3.2-SNAPSHOT,"usrv-a:3.13.0-rc547,usrv-b:3.13.0-rc152,usrv-c:3.13.0-rc94"

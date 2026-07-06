@@ -6,6 +6,7 @@ import type {
   MetricsDocument,
   NotesDocument,
   RunRecord,
+  ScenarioHelpDocument,
   ScenarioRecord,
   SaturationDocument,
   TestRecord,
@@ -46,6 +47,30 @@ export const runRecordSchema: z.ZodType<RunRecord, z.ZodTypeDef, unknown> = z.ob
 export const scenarioRecordSchema: z.ZodType<ScenarioRecord, z.ZodTypeDef, unknown> = z.object({
   scenario_id: requiredText,
   name: requiredText
+});
+
+export const scenarioHelpDocumentSchema: z.ZodType<ScenarioHelpDocument, z.ZodTypeDef, unknown> = z.object({
+  schemaVersion: z.literal(1),
+  scenarios: z.record(
+    z.object({
+      title: requiredText,
+      body: textCell.default(""),
+      microservices: z.array(requiredText).default([]),
+      sagas: z.array(requiredText).default([]),
+      activities: z.array(requiredText).default([]),
+      blOperations: z.array(requiredText).default([]),
+      images: z
+        .array(
+          z.object({
+            path: requiredText,
+            caption: textCell.optional(),
+            mimeType: textCell.default(""),
+            dataUrl: textCell.default("")
+          })
+        )
+        .default([])
+    })
+  )
 });
 
 export const testRecordSchema: z.ZodType<TestRecord, z.ZodTypeDef, unknown> = z.object({

@@ -112,6 +112,11 @@ async function sourceFromLoadedZip(
       if (!entry) throw new Error("File not found in zip");
       return entry.async("text");
     },
+    readBytes: async (relativePath) => {
+      const entry = fileMap.get(`${rootPrefix}${normalizeImportPath(relativePath)}`);
+      if (!entry) throw new Error("File not found in zip");
+      return entry.async("uint8array");
+    },
     hasDirectory: async (relativePath) => {
       const directoryPath = normalizeImportPath(`${rootPrefix}${normalizeImportPath(relativePath)}`);
       return directoryPaths.has(directoryPath) || filePaths.some((path) => path.startsWith(`${directoryPath}/`));
@@ -160,6 +165,7 @@ export async function selectTauriFolderSource(): Promise<ImportFileSource | unde
     rootName,
     sourcePath: selected,
     readText: (relativePath) => fs.readTextFile(joinPath(selected, relativePath)),
+    readBytes: (relativePath) => fs.readFile(joinPath(selected, relativePath)),
     hasDirectory: async (relativePath) => {
       try {
         await fs.readDir(joinPath(selected, relativePath));
@@ -206,6 +212,11 @@ export function sourceFromFileList(files: FileList): ImportFileSource {
       const file = fileMap.get(relativePath);
       if (!file) throw new Error("File not selected");
       return file.text();
+    },
+    readBytes: async (relativePath) => {
+      const file = fileMap.get(relativePath);
+      if (!file) throw new Error("File not selected");
+      return new Uint8Array(await file.arrayBuffer());
     }
   };
 }

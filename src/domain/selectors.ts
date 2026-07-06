@@ -37,6 +37,34 @@ export interface MetricPoint extends MeasurementRecord {
   source?: "observed" | "derived" | "rogue";
 }
 
+export interface CoverageMatrixCell {
+  scenario_id: string;
+  config_id: string;
+  planned: boolean;
+  runCount: number;
+  value: "-" | number;
+}
+
+export interface CoverageMatrixRow {
+  scenario_id: string;
+  scenario_name: string;
+  cells: CoverageMatrixCell[];
+}
+
+export interface CoverageMatrixConfig {
+  config_id: string;
+  label: string;
+}
+
+export interface CoverageMatrix {
+  configs: CoverageMatrixConfig[];
+  rows: CoverageMatrixRow[];
+  plannedPairs: number;
+  coveredPairs: number;
+  pendingPairs: number;
+  unplannedRuns: number;
+}
+
 export function formatNumber(value: number | undefined, digits = 2): string {
   if (value === undefined || Number.isNaN(value)) return "-";
   return new Intl.NumberFormat(undefined, {
@@ -63,6 +91,10 @@ export function formatDateTime(value: string | undefined): string {
   })
     .format(date)
     .replace("24:", "00:");
+}
+
+function pairKey(scenarioId: string, configId: string): string {
+  return `${scenarioId}\u0000${configId}`;
 }
 
 export function scenarioName(pkg: ImportedPackage, scenarioId: string): string {
@@ -139,6 +171,91 @@ export function componentVersionSummary(pkg: ImportedPackage, componentsVer: str
       return component.version ? `${label} ${component.version}` : label;
     })
     .join(", ");
+}
+
+export function buildCoverageMatrix(pkg: ImportedPackage): CoverageMatrix {
+  const scenarioEntries = new Map(pkg.scenarios.map((scenario) => [scenario.scenario_id, scenario]));
+  const configEntries = new Map(pkg.configs.map((config) => [config.config_id, config]));
+  const scenarioIds = new Set(pkg.scenarios.map((scenario) => scenario.scenario_id));
+  const configIds = new Set(pkg.configs.map((config) => config.config_id));
+
+  for (const test of pkg.tests) {
+    scenarioIds.add(test.scenario_id);
+    configIds.add(test.config_id);
+  }
+
+  for (const run of pkg.runs) {
+    scenarioIds.add(run.scenario_id);
+    configIds.add(run.config_id);
+  }
+
+  const plannedPairs = new Set(pkg.tests.map((test) => pairKey(test.scenario_id, test.config_id)));
+  const runCounts = new Map<string, number>();
+
+  for (const run of pkg.runs) {
+    const key = pairKey(run.scenario_id, run.config_id);
+    runCounts.set(key, (runCounts.get(key) ?? 0) + 1);
+  }
+
+  let coveredPairs = 0;
+  let pendingPairs = 0;
+
+  for (const key of plannedPairs) {
+    if ((runCounts.get(key) ?? 0) > 0) {
+      coveredPairs += 1;
+    } else {
+      pendingPairs += 1;
+    }
+  }
+
+  const unplannedRuns = pkg.runs.filter((run) => !plannedPairs.has(pairKey(run.scenario_id, run.config_id))).length;
+  const orderedScenarioIds = [...scenarioIds].sort((left, right) => {
+    const leftName = scenarioEntries.get(left)?.name ?? left;
+    const rightName = scenarioEntries.get(right)?.name ?? right;
+    return leftName.localeCompare(rightName, undefined, { numeric: true });
+  });
+  const orderedConfigIds = [...configIds].sort((left, right) => {
+    const leftConfig = configEntries.get(left);
+    const rightConfig = configEntries.get(right);
+    const leftLabel = leftConfig?.exagon_ver ?? left;
+    const rightLabel = rightConfig?.exagon_ver ?? right;
+    return leftLabel.localeCompare(rightLabel, undefined, { numeric: true });
+  });
+
+  const configs = orderedConfigIds.map((configId) => {
+    const config = configEntries.get(configId);
+    return {
+      config_id: configId,
+      label: config?.exagon_ver ?? configId
+    };
+  });
+
+  const rows = orderedScenarioIds.map((scenarioId) => ({
+    scenario_id: scenarioId,
+    scenario_name: scenarioEntries.get(scenarioId)?.name ?? scenarioId,
+    cells: orderedConfigIds.map((configId) => {
+      const key = pairKey(scenarioId, configId);
+      const planned = plannedPairs.has(key);
+      const runCount = runCounts.get(key) ?? 0;
+
+      return {
+        scenario_id: scenarioId,
+        config_id: configId,
+        planned,
+        runCount,
+        value: planned ? runCount : ("-" as const)
+      };
+    })
+  }));
+
+  return {
+    configs,
+    rows,
+    plannedPairs: plannedPairs.size,
+    coveredPairs,
+    pendingPairs,
+    unplannedRuns
+  };
 }
 
 export function buildRunSummary(pkg: ImportedPackage, run: RunRecord): RunSummary {

@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="360" viewBox="0 0 920 360" role="img" aria-labelledby="title desc">
+  <title id="title">RW/RO cache variants</title>
+  <desc id="desc">Comparison between no cache, heap cache, and KVS cache paths.</desc>
+  <defs>
+    <style>
+      .label { font: 700 18px Arial, sans-serif; fill: #17202a; }
+      .small { font: 600 13px Arial, sans-serif; fill: #5b6673; }
+      .box { fill: #ffffff; stroke: #c7ced7; stroke-width: 2; rx: 8; }
+      .accent { fill: #eef8f7; stroke: #0f7f7a; }
+      .warn { fill: #fff7e8; stroke: #a16000; }
+      .info { fill: #eff6ff; stroke: #245ea8; }
+      .line { fill: none; stroke: #39434f; stroke-width: 2.5; marker-end: url(#arrow); }
+      .muted-line { fill: none; stroke: #9aa5b1; stroke-width: 2; stroke-dasharray: 6 5; marker-end: url(#arrow-muted); }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#39434f" />
+    </marker>
+    <marker id="arrow-muted" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#9aa5b1" />
+    </marker>
+  </defs>
+
+  <rect x="18" y="18" width="884" height="324" fill="#f8fafb" stroke="#d9dee5" rx="10" />
+  <text x="38" y="54" class="label">RW/RO variants</text>
+  <text x="38" y="78" class="small">Baseline without cache versus optimized local and shared cache paths.</text>
+
+  <rect x="54" y="130" width="140" height="70" class="box accent" />
+  <text x="84" y="160" class="label">Client</text>
+  <text x="75" y="182" class="small">network request</text>
+
+  <rect x="268" y="58" width="170" height="70" class="box warn" />
+  <text x="304" y="88" class="label">CacheNone</text>
+  <text x="296" y="110" class="small">direct RO lookup</text>
+
+  <rect x="268" y="145" width="170" height="70" class="box info" />
+  <text x="309" y="175" class="label">Heap</text>
+  <text x="296" y="197" class="small">local RO cache</text>
+
+  <rect x="268" y="232" width="170" height="70" class="box accent" />
+  <text x="314" y="262" class="label">KVS</text>
+  <text x="294" y="284" class="small">shared RO cache</text>
+
+  <rect x="536" y="98" width="150" height="74" class="box" />
+  <text x="567" y="129" class="label">Service</text>
+  <text x="560" y="151" class="small">business logic</text>
+
+  <rect x="748" y="145" width="120" height="70" class="box" />
+  <text x="771" y="175" class="label">DB</text>
+  <text x="764" y="197" class="small">main store</text>
+
+  <path d="M194 165 C222 112 236 92 268 92" class="line" />
+  <path d="M194 165 L268 180" class="line" />
+  <path d="M194 165 C222 224 236 264 268 267" class="line" />
+
+  <path d="M438 92 C482 92 496 116 536 128" class="line" />
+  <path d="M438 180 L536 137" class="line" />
+  <path d="M438 267 C494 256 512 174 536 151" class="line" />
+
+  <path d="M686 135 C714 143 728 158 748 174" class="line" />
+  <path d="M438 180 C536 232 650 235 748 198" class="muted-line" />
+  <path d="M438 267 C566 310 712 282 782 216" class="muted-line" />
+
+  <text x="486" y="246" class="small">cache hit avoids part of the DB path</text>
+</svg>

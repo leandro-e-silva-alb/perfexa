@@ -1,7 +1,8 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { GitCompare } from "lucide-react";
+import { CircleHelp, GitCompare } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DataTable } from "../../components/DataTable";
+import { HelpModal } from "../../components/HelpModal";
 import { StatusPill } from "../../components/StatusPill";
 import { buildCpuRegressionRows, type CpuRegressionRow } from "../../domain/regression";
 import { useAppState } from "../AppState";
@@ -28,6 +29,7 @@ function average(values: number[]): number | null {
 export function RegressionPage() {
   const { activePackage, setComparisonTestKeys, setView } = useAppState();
   const [selectedTestKeys, setSelectedTestKeys] = useState<string[]>([]);
+  const [helpOpen, setHelpOpen] = useState(false);
   const rows = useMemo(() => (activePackage ? buildCpuRegressionRows(activePackage) : []), [activePackage]);
 
   useEffect(() => {
@@ -70,27 +72,30 @@ export function RegressionPage() {
     {
       id: "selection",
       header: () => (
-        <input
-          aria-label="Select all regression rows"
-          checked={rows.length > 0 && selectedTestKeys.length === rows.length}
-          type="checkbox"
-          onChange={toggleAllRows}
-        />
+        <label className="regression-select-cell">
+          <input
+            aria-label="Select all regression rows"
+            checked={rows.length > 0 && selectedTestKeys.length === rows.length}
+            type="checkbox"
+            onChange={toggleAllRows}
+          />
+        </label>
       ),
       cell: ({ row }) => (
-        <input
-          aria-label={`Select ${row.original.testKey}`}
-          checked={selectedSet.has(row.original.testKey)}
-          type="checkbox"
-          onChange={() => toggleRow(row.original.testKey)}
-        />
+        <label className="regression-select-cell">
+          <input
+            aria-label={`Select ${row.original.testKey}`}
+            checked={selectedSet.has(row.original.testKey)}
+            type="checkbox"
+            onChange={() => toggleRow(row.original.testKey)}
+          />
+        </label>
       ),
       enableSorting: false
     },
     { id: "scenario", header: "Scenario", accessorKey: "scenario" },
-    { id: "sequenceId", header: "Sequence ID", accessorKey: "sequenceId" },
-    { id: "exagonVersion", header: "Exagon_ver", accessorKey: "exagonVersion" },
-    { id: "configId", header: "Config ID", accessorKey: "configId" },
+    { id: "exagonVersion", header: "Exagon version", accessorKey: "exagonVersion" },
+    { id: "sequenceId", header: "SN", accessorKey: "sequenceId" },
     {
       id: "idle",
       header: "Base CPU (idle)",
@@ -98,12 +103,12 @@ export function RegressionPage() {
     },
     {
       id: "marginalCpu",
-      header: "Marginal CPU (L)",
+      header: "Incremental CPU (L)",
       cell: ({ row }) => formatFixed(row.original.marginalCpu, 4)
     },
     {
       id: "transientOverhead",
-      header: "Transient overhead (extra)",
+      header: "Transient CPU overhead (extra)",
       cell: ({ row }) => formatFixed(row.original.transientOverhead, 2)
     },
     {
@@ -122,7 +127,6 @@ export function RegressionPage() {
       cell: ({ row }) => `${row.original.fittedPoints}/${row.original.totalPoints}`
     }
   ];
-
   return (
     <div className="page-stack page-stack-wide">
       <header className="page-header">
@@ -132,6 +136,17 @@ export function RegressionPage() {
           <span className="header-meta">{activePackage.name}</span>
         </div>
         <div className="header-actions">
+          <button
+            className="button"
+            type="button"
+            onClick={() => setHelpOpen((open) => !open)}
+            aria-expanded={helpOpen}
+            aria-controls="regression-help"
+            title="Show regression help"
+          >
+            <CircleHelp size={16} aria-hidden="true" />
+            Help
+          </button>
           <button
             className="button"
             type="button"
@@ -175,6 +190,17 @@ export function RegressionPage() {
           initialSorting={[{ id: "scenario", desc: false }]}
         />
       </section>
+      <HelpModal
+        open={helpOpen}
+        title="Regression model help"
+        id="regression-help"
+        className="regression-help-modal"
+        contentClassName="regression-help-content"
+        closeLabel="Close regression help"
+        onClose={() => setHelpOpen(false)}
+      >
+        <img src="/regression-cpu-model.png" alt="Decomposicao do modelo CPU por TPS" />
+      </HelpModal>
     </div>
   );
 }

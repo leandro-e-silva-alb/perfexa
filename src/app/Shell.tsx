@@ -3,6 +3,7 @@ import {
   BarChart3,
   ChevronsLeft,
   ChevronsRight,
+  ClipboardCheck,
   Database,
   FolderInput,
   GitCompare,
@@ -24,6 +25,7 @@ const navItems: Array<{
 }> = [
   { id: "import", label: "Import", icon: FolderInput },
   { id: "library", label: "Library", icon: Database },
+  { id: "coverage", label: "Coverage", icon: ClipboardCheck, needsPackage: true },
   { id: "overview", label: "Overview", icon: Table2, needsPackage: true },
   { id: "explorer", label: "Metrics", icon: BarChart3, needsPackage: true },
   { id: "regression", label: "Regression", icon: Activity, needsPackage: true },
@@ -75,13 +77,14 @@ export function Shell({ children }: { children: ReactNode }) {
         <div className="sidebar-footer">
           <span>{packages.length} package{packages.length === 1 ? "" : "s"}</span>
           <strong>{activePackage?.name ?? "No package selected"}</strong>
+          <span className="sidebar-version">Perfexa v{__APP_VERSION__}</span>
         </div>
       </aside>
       <main className="main-view">
         {isBusy ? (
-          <div className="global-loading" role="status" aria-live="polite">
-            <Loader2 size={15} />
-            <span>{busyLabel}</span>
+          <div className="global-loading" role="status" aria-live="polite" title={busyLabel}>
+            <Loader2 size={20} />
+            <span className="sr-only">{busyLabel}</span>
           </div>
         ) : null}
         <div className={isBusy ? "page-transition page-transition-busy" : "page-transition"}>

@@ -9,6 +9,8 @@ function fixtureSource(rootName: string): ImportFileSource {
     rootName,
     readText: async (relativePath) =>
       readFile(new URL(`../../fixtures/${rootName}/${relativePath}`, import.meta.url), "utf8"),
+    readBytes: async (relativePath) =>
+      new Uint8Array(await readFile(new URL(`../../fixtures/${rootName}/${relativePath}`, import.meta.url))),
     hasDirectory: async (relativePath) => {
       try {
         return (await stat(new URL(`../../fixtures/${rootName}/${relativePath}`, import.meta.url))).isDirectory();
@@ -24,8 +26,8 @@ describe("CPU regression", () => {
     const result = await validateImportSource(fixtureSource("real-perf-import"));
     const rows = buildCpuRegressionRows(result.package!);
 
-    expect(rows).toHaveLength(6);
-    expect(new Set(rows.map((row) => row.testKey))).toHaveProperty("size", 6);
+    expect(rows).toHaveLength(21);
+    expect(new Set(rows.map((row) => row.testKey))).toHaveProperty("size", 21);
     expect(rows.every((row) => row.sequenceId === 0)).toBe(true);
   });
 

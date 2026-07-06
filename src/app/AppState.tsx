@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { ImportedPackage, NotesDocument } from "../domain/types";
 import { createStorage, type PerfexaStorage } from "../storage/database";
 
-export type AppView = "import" | "library" | "overview" | "explorer" | "regression" | "comparisons";
+export type AppView = "import" | "library" | "overview" | "coverage" | "explorer" | "regression" | "comparisons";
 
 interface AppStateValue {
   storageReady: boolean;
@@ -77,16 +77,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }
 
   async function saveImportedPackage(pkg: ImportedPackage) {
-    if (!storage) return;
+    if (!storage) throw new Error("Storage is not ready yet.");
     setOperationBusy(true);
     setBusyLabel("Saving import");
     try {
       await storage.savePackage(pkg);
       const loaded = await storage.listPackages();
+      if (!loaded.some((item) => item.id === pkg.id)) {
+        throw new Error("The package was saved, but could not be loaded back from storage.");
+      }
       setPackages(loaded);
       setActivePackageId(pkg.id);
       setComparisonTestKeysState([]);
       setCurrentView("overview");
+    } catch (error) {
+      console.error("Unable to save imported package.", error);
+      throw error;
     } finally {
       setOperationBusy(false);
     }

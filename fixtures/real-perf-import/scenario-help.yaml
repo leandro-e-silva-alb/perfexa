@@ -1,0 +1,126 @@
+schemaVersion: 1
+scenarios:
+  choreography:
+    title: Choreography
+    body: |
+      Cenario orientado a eventos em que os participantes reagem por mensagens
+      e coordenam o fluxo sem um orquestrador central. E util para observar o
+      custo de comunicacao assincrona e o impacto de Kafka no caminho critico.
+    microservices:
+      - 3 participants
+      - 1 message broker
+    sagas:
+      - 1 choreographed from network
+    activities:
+      - 3 external choreographed
+      - 2 internal participant operations
+    blOperations:
+      - 1 RW create
+      - 1 RW save
+      - 1 external publish
+      - 1 external consume
+
+  parallel_command:
+    title: Parallel command
+    body: |
+      Cenario com trabalho externo executado em paralelo. A leitura principal e
+      perceber como o aumento de throughput amortiza o overhead transitorio e
+      como o CPU incremental cresce quando ha varias chamadas concorrentes.
+    microservices:
+      - 1 orchestrator
+      - 2 participants
+    sagas:
+      - 1 orchestrated from network
+    activities:
+      - 2 external orchestrated in parallel
+      - 2 internal orchestrated
+    blOperations:
+      - 1 RW save
+      - 2 external requests
+      - 1 transient get
+
+  rwro_consistent:
+    title: RW/RO Consistent
+    body: |
+      Cenario read-write/read-only com consistencia forte. Deve representar a
+      alternativa mais conservadora, privilegiando dados frescos mesmo quando
+      isso aumenta latencia, CPU ou pressao sobre armazenamento.
+    microservices:
+      - 1 orchestrator
+      - 2 participants
+      - 1 database
+    sagas:
+      - 1 orchestrated from network
+      - 1 orchestrated from loopback
+    activities:
+      - 2 internal orchestrated
+      - 2 external orchestrated
+    blOperations:
+      - 1 RW save
+      - 1 RW create
+      - 1 RO getById
+      - 1 external request
+
+  rwro_none:
+    title: RW/RO CacheNone
+    body: |
+      Variante sem cache para servir como baseline. Ajuda a comparar o custo
+      direto de leituras repetidas contra as versoes otimizadas com heap ou KVS.
+    microservices:
+      - 1 orchestrator
+      - 2 participants
+      - 1 database
+    sagas:
+      - 1 orchestrated from network
+    activities:
+      - 2 internal orchestrated
+      - 2 external orchestrated
+    blOperations:
+      - 1 RW save
+      - 1 RO getById
+      - 1 external request
+      - 1 transient get
+    images:
+      - path: help/images/rwro-cache-variants.svg
+        caption: RW/RO cache variants
+
+  rwro_optimized_heap:
+    title: RW/RO Optimized Heap
+    body: |
+      Variante otimizada com cache em memoria local. Espera-se reducao de custo
+      em leituras repetidas, com trade-off de memoria e eventual invalidacao.
+    microservices:
+      - 1 orchestrator
+      - 2 participants
+      - 1 local heap cache
+    sagas:
+      - 1 orchestrated from network
+    activities:
+      - 2 internal orchestrated
+      - 2 external orchestrated
+    blOperations:
+      - 1 RW save
+      - 1 RO getById from heap
+      - 1 external request
+      - 1 transient get
+
+  rwro_optimized_kvs:
+    title: RW/RO Optimized KVS
+    body: |
+      Variante otimizada com cache em key-value store. Deve reduzir leituras ao
+      armazenamento principal mantendo um estado partilhado entre instancias.
+    microservices:
+      - 1 orchestrator
+      - 2 participants
+      - 1 key-value cache
+      - 1 database
+    sagas:
+      - 1 orchestrated from network
+    activities:
+      - 2 internal orchestrated
+      - 2 external orchestrated
+    blOperations:
+      - 1 RW save
+      - 1 RO getById from KVS
+      - 1 external request
+      - 1 transient get

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { measurementsForScope, testKeyFor } from "./selectors";
+import { buildCoverageMatrix, measurementsForScope, testKeyFor } from "./selectors";
 import type { ImportedPackage, MeasurementRecord } from "./types";
 
 function measurement(
@@ -95,5 +95,76 @@ describe("metric selectors", () => {
       ["run-2", "mongo-a-0", 20],
       ["run-2", "mongo-a-1", 40]
     ]);
+  });
+});
+
+describe("coverage selectors", () => {
+  it("builds a scenario/config execution matrix from planned tests and runs", () => {
+    const data: ImportedPackage = {
+      ...pkg([]),
+      scenarios: [
+        { scenario_id: "checkout", name: "Checkout" },
+        { scenario_id: "browse", name: "Browse" }
+      ],
+      configs: [
+        { config_id: "cfg-a", exagon_ver: "1.0.0", components_ver: "" },
+        { config_id: "cfg-b", exagon_ver: "2.0.0", components_ver: "" },
+        { config_id: "cfg-c", exagon_ver: "3.0.0", components_ver: "" }
+      ],
+      tests: [
+        { scenario_id: "checkout", config_id: "cfg-a", sequence_id: 0 },
+        { scenario_id: "checkout", config_id: "cfg-b", sequence_id: 0 },
+        { scenario_id: "browse", config_id: "cfg-b", sequence_id: 0 }
+      ],
+      runs: [
+        {
+          run_id: "run-1",
+          scenario_id: "checkout",
+          config_id: "cfg-a",
+          sequence_id: 0,
+          target_tps: 100,
+          started_at: "2026-07-02T12:00:00Z",
+          duration: "10m"
+        },
+        {
+          run_id: "run-2",
+          scenario_id: "checkout",
+          config_id: "cfg-a",
+          sequence_id: 1,
+          target_tps: 200,
+          started_at: "2026-07-02T12:10:00Z",
+          duration: "10m"
+        },
+        {
+          run_id: "run-3",
+          scenario_id: "browse",
+          config_id: "cfg-c",
+          sequence_id: 0,
+          target_tps: 300,
+          started_at: "2026-07-02T12:20:00Z",
+          duration: "10m"
+        }
+      ]
+    };
+
+    const matrix = buildCoverageMatrix(data);
+    const checkout = matrix.rows.find((row) => row.scenario_id === "checkout")!;
+    const browse = matrix.rows.find((row) => row.scenario_id === "browse")!;
+
+    expect(matrix.configs.map((config) => config.config_id)).toEqual(["cfg-a", "cfg-b", "cfg-c"]);
+    expect(Object.fromEntries(checkout.cells.map((cell) => [cell.config_id, cell.value]))).toEqual({
+      "cfg-a": 2,
+      "cfg-b": 0,
+      "cfg-c": "-"
+    });
+    expect(Object.fromEntries(browse.cells.map((cell) => [cell.config_id, cell.value]))).toEqual({
+      "cfg-a": "-",
+      "cfg-b": 0,
+      "cfg-c": "-"
+    });
+    expect(matrix.plannedPairs).toBe(3);
+    expect(matrix.coveredPairs).toBe(1);
+    expect(matrix.pendingPairs).toBe(2);
+    expect(matrix.unplannedRuns).toBe(1);
   });
 });

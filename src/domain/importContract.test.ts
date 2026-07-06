@@ -5,7 +5,9 @@ import { evaluateSaturationForRun } from "./saturation";
 import { resolveTopologyMeasurements } from "./topologyMetrics";
 import type { ImportFileSource } from "./types";
 
-const validFiles: Record<string, string> = {
+type TestFileMap = Record<string, string | Uint8Array>;
+
+const validFiles: TestFileMap = {
   "manifest.yaml": `
 schemaVersion: 1
 components:
@@ -92,13 +94,19 @@ run-001,throttling,max,kafka-1,30
 `
 };
 
-function source(files: Record<string, string>): ImportFileSource {
+function source(files: TestFileMap): ImportFileSource {
   return {
     rootName: "test-import",
     readText: async (relativePath) => {
-      const text = files[relativePath];
-      if (text === undefined) throw new Error("missing");
-      return text;
+      const value = files[relativePath];
+      if (typeof value !== "string") throw new Error("missing");
+      return value;
+    },
+    readBytes: async (relativePath) => {
+      const value = files[relativePath];
+      if (value === undefined) throw new Error("missing");
+      if (typeof value === "string") return new TextEncoder().encode(value);
+      return value;
     },
     hasDirectory: async (relativePath) => relativePath === "raw"
   };
@@ -109,6 +117,8 @@ function fixtureSource(rootName: string): ImportFileSource {
     rootName,
     readText: async (relativePath) =>
       readFile(new URL(`../../fixtures/${rootName}/${relativePath}`, import.meta.url), "utf8"),
+    readBytes: async (relativePath) =>
+      new Uint8Array(await readFile(new URL(`../../fixtures/${rootName}/${relativePath}`, import.meta.url))),
     hasDirectory: async (relativePath) => {
       try {
         return (await stat(new URL(`../../fixtures/${rootName}/${relativePath}`, import.meta.url))).isDirectory();
@@ -125,9 +135,104 @@ describe("import contract", () => {
 
     expect(result.report.valid).toBe(true);
     expect(result.package?.runs).toHaveLength(1);
+    expect(result.package?.scenarioHelp).toBeUndefined();
     expect(result.report.features.find((feature) => feature.featureId === "overview")?.status).toBe(
       "available"
     );
+  });
+
+  it("accepts valid scenario help with categories and an image", async () => {
+    const result = await validateImportSource(
+      source({
+        ...validFiles,
+        "scenario-help.yaml": `
+schemaVersion: 1
+scenarios:
+  checkout:
+    title: Checkout steady load
+    body: |
+      Descricao geral do cenario.
+    microservices:
+      - 1 orchestrator
+      - 2 participants
+    sagas:
+      - 1 orchestrated from network
+    activities:
+      - 2 internal orchestrated
+    blOperations:
+      - 1 RW save
+    images:
+      - path: help/images/checkout-flow.png
+        caption: Checkout flow
+`,
+        "help/images/checkout-flow.png": new Uint8Array([137, 80, 78, 71])
+      })
+    );
+
+    expect(result.report.valid).toBe(true);
+    expect(result.package?.scenarioHelp?.scenarios.checkout.microservices).toEqual([
+      "1 orchestrator",
+      "2 participants"
+    ]);
+    expect(result.package?.scenarioHelp?.scenarios.checkout.images[0]).toMatchObject({
+      path: "help/images/checkout-flow.png",
+      caption: "Checkout flow",
+      mimeType: "image/png",
+      dataUrl: "data:image/png;base64,iVBORw=="
+    });
+  });
+
+  it("rejects scenario help that references an unknown scenario_id", async () => {
+    const result = await validateImportSource(
+      source({
+        ...validFiles,
+        "scenario-help.yaml": `
+schemaVersion: 1
+scenarios:
+  missing-scenario:
+    title: Missing
+`
+      })
+    );
+
+    expect(result.report.valid).toBe(false);
+    expect(result.report.errors.some((error) => error.message.includes('unknown scenario_id "missing-scenario"'))).toBe(
+      true
+    );
+  });
+
+  it("rejects scenario help with invalid structure", async () => {
+    const result = await validateImportSource(
+      source({
+        ...validFiles,
+        "scenario-help.yaml": `
+schemaVersion: 2
+scenarios: []
+`
+      })
+    );
+
+    expect(result.report.valid).toBe(false);
+    expect(result.report.errors.some((error) => error.file === "scenario-help.yaml")).toBe(true);
+  });
+
+  it("rejects scenario help with a missing image path", async () => {
+    const result = await validateImportSource(
+      source({
+        ...validFiles,
+        "scenario-help.yaml": `
+schemaVersion: 1
+scenarios:
+  checkout:
+    title: Checkout
+    images:
+      - path: help/images/missing.png
+`
+      })
+    );
+
+    expect(result.report.valid).toBe(false);
+    expect(result.report.errors.some((error) => error.message.includes("help/images/missing.png"))).toBe(true);
   });
 
   it("accepts the sample fixture", async () => {
@@ -142,7 +247,7 @@ describe("import contract", () => {
 
     expect(result.report.valid).toBe(true);
     expect(result.package?.runs).toHaveLength(66);
-    expect(result.package?.configs).toHaveLength(3);
+    expect(result.package?.configs).toHaveLength(4);
   });
 
   it("accepts stored group measurements as topology constraints", async () => {

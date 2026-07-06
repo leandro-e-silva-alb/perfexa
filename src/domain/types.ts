@@ -20,6 +20,28 @@ export interface ScenarioRecord {
   name: string;
 }
 
+export interface ScenarioHelpImage {
+  path: string;
+  caption?: string;
+  mimeType: string;
+  dataUrl: string;
+}
+
+export interface ScenarioHelpEntry {
+  title: string;
+  body: string;
+  microservices: string[];
+  sagas: string[];
+  activities: string[];
+  blOperations: string[];
+  images: ScenarioHelpImage[];
+}
+
+export interface ScenarioHelpDocument {
+  schemaVersion: 1;
+  scenarios: Record<string, ScenarioHelpEntry>;
+}
+
 export interface TestRecord {
   scenario_id: string;
   config_id: string;
@@ -170,6 +192,7 @@ export interface ImportedPackage {
   topology: TopologyDocument;
   saturation: SaturationDocument;
   notes: NotesDocument;
+  scenarioHelp?: ScenarioHelpDocument;
   scenarios: ScenarioRecord[];
   configs: ConfigRecord[];
   tests: TestRecord[];
@@ -182,6 +205,7 @@ export interface ImportFileSource {
   rootName: string;
   sourcePath?: string;
   readText(relativePath: string): Promise<string>;
+  readBytes(relativePath: string): Promise<Uint8Array>;
   hasDirectory?(relativePath: string): Promise<boolean | undefined>;
 }
 

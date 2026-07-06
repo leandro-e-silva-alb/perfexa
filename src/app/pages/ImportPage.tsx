@@ -169,6 +169,7 @@ const contractFiles = [
   "topology.yaml",
   "saturation.yaml",
   "notes.yaml",
+  "scenario-help.yaml (optional)",
   "raw/"
 ];
 
@@ -198,6 +199,8 @@ export function ImportPage() {
   const [githubConfig, setGithubConfig] = useState<GitHubImportConfig>(() => loadGitHubConfig());
   const [githubToken, setGithubToken] = useState("");
   const [tokenState, setTokenState] = useState<TokenState>(isTauriRuntime() ? "checking" : "unavailable");
+  const [saveError, setSaveError] = useState<string>();
+  const [packageMenuOpen, setPackageMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const githubAccount = useMemo(() => githubCredentialAccount(githubConfig.apiBaseUrl), [githubConfig.apiBaseUrl]);
@@ -229,6 +232,7 @@ export function ImportPage() {
 
   async function runValidation(source: ImportFileSource) {
     setBusy(true);
+    setSaveError(undefined);
     setSelectedSource(source.sourcePath ?? source.rootName);
     try {
       setResult(await validateImportSource(source));
@@ -238,6 +242,7 @@ export function ImportPage() {
   }
 
   async function handleSelectFolder() {
+    setPackageMenuOpen(false);
     const tauriSource = await selectTauriFolderSource();
     if (tauriSource) {
       await runValidation(tauriSource);
@@ -247,6 +252,7 @@ export function ImportPage() {
   }
 
   async function handleSelectZip() {
+    setPackageMenuOpen(false);
     try {
       const tauriSource = await selectTauriZipSource();
       if (tauriSource) {
@@ -350,8 +356,11 @@ export function ImportPage() {
   async function handleSave() {
     if (!result?.package) return;
     setSaving(true);
+    setSaveError(undefined);
     try {
       await saveImportedPackage(result.package);
+    } catch (error) {
+      setSaveError(readableErrorMessage(error, "The package could not be saved."));
     } finally {
       setSaving(false);
     }
@@ -365,14 +374,29 @@ export function ImportPage() {
           <h1>Validate and import a performance package</h1>
         </div>
         <div className="header-actions">
-          <button className="button button-primary" type="button" onClick={handleSelectFolder} disabled={busy}>
-            {busy ? <Loader2 className="spin" size={17} /> : <FolderOpen size={17} />}
-            {busy ? "Validating" : "Select folder"}
-          </button>
-          <button className="button" type="button" onClick={handleSelectZip} disabled={busy}>
-            {busy ? <Loader2 className="spin" size={17} /> : <FileArchive size={17} />}
-            {busy ? "Validating" : "Select zip"}
-          </button>
+          <div className="package-picker">
+            <button
+              className="button button-primary"
+              type="button"
+              onClick={() => setPackageMenuOpen((open) => !open)}
+              disabled={busy}
+            >
+              {busy ? <Loader2 className="spin" size={17} /> : <FolderOpen size={17} />}
+              {busy ? "Validating" : "Select package"}
+            </button>
+            {packageMenuOpen ? (
+              <div className="package-picker-menu">
+                <button type="button" onClick={handleSelectFolder}>
+                  <FolderOpen size={16} />
+                  Folder
+                </button>
+                <button type="button" onClick={handleSelectZip}>
+                  <FileArchive size={16} />
+                  Zip archive
+                </button>
+              </div>
+            ) : null}
+          </div>
           <button
             className="button"
             type="button"
@@ -540,6 +564,16 @@ export function ImportPage() {
               {result.package?.configs.length ?? 0} configs,{" "}
               {result.package?.measurements.length ?? 0} measurements, {result.package?.scenarios.length ?? 0} scenarios.
             </p>
+          </div>
+        </section>
+      ) : null}
+
+      {saveError ? (
+        <section className="panel save-error-panel">
+          <XCircle size={20} />
+          <div>
+            <h2>Import was not saved</h2>
+            <p>{saveError}</p>
           </div>
         </section>
       ) : null}

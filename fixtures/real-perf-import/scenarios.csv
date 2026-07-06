@@ -1,7 +1,22 @@
-﻿"scenario_id","name"
-"choreography","Coreografia"
-"parallel_command","Parallel Command"
-"rwro_consistent","RW/RO Consistent"
-"rwro_none","RW/RO CacheNone"
-"rwro_optimized_heap","RW/RO Optimized Heap"
-"rwro_optimized_kvs","RW/RO Optimized KVS"
+scenario_id,name
+choreography,Coreografia
+parallel_command,Parallel Command
+rwro_consistent,RW/RO Consistent
+rwro_none,RW/RO CacheNone
+rwro_optimized_heap,RW/RO Optimized Heap
+rwro_optimized_kvs,RW/RO Optimized KVS
+ext_request,External Request
+subsaga,Subsaga
+deferred,Saga Deferred
+simple,Saga Simple
+scheduled,Saga Scheduled
+transient,Transient
+rw_consistent,RW Consistent
+rw_none,RW CacheNone
+rw_optimized_heap,RW Optimized Heap
+rw_optimized_kvs,RW Optimized KVS
+local_consistent,Local Consistent
+local_none,Local CacheNone
+local_optimized_heap,Local Optimized Heap
+local_optimized_kvs,Local Optimized KVS
+query,Query
