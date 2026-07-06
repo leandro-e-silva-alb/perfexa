@@ -139,6 +139,7 @@ button:disabled {
   justify-content: center;
   padding-left: 0;
   padding-right: 0;
+  padding-bottom: 54px;
 }
 
 .sidebar-collapsed .brand div,
@@ -152,10 +153,6 @@ button:disabled {
   top: 60px;
   left: 21px;
   margin-left: 0;
-}
-
-.sidebar-collapsed .nav-list {
-  margin-top: 50px;
 }
 
 .sidebar-collapsed .nav-item {
@@ -1233,8 +1230,6 @@ button:disabled {
 }
 
 .data-table-wrap {
-  overflow: auto;
-  max-height: calc(100vh - 280px);
   border: 1px solid var(--border);
   border-radius: 7px;
 }

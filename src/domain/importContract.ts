@@ -236,34 +236,8 @@ function addGroupedIssues<T>(
   }
 }
 
-function testKey(item: Pick<TestRecord, "scenario_id" | "config_id" | "sequence_id">): string {
-  return `${item.scenario_id} / ${item.config_id} / #${item.sequence_id}`;
-}
-
-function validateSequenceIds(tests: TestRecord[], errors: ValidationIssue[]): void {
-  const byScenarioConfig = new Map<string, TestRecord[]>();
-  for (const test of tests) {
-    const key = `${test.scenario_id}|${test.config_id}`;
-    byScenarioConfig.set(key, [...(byScenarioConfig.get(key) ?? []), test]);
-  }
-
-  for (const group of byScenarioConfig.values()) {
-    const sequenceIds = [...new Set(group.map((test) => test.sequence_id))].sort((a, b) => a - b);
-    const expected = sequenceIds.map((_, index) => index);
-    const isContiguousFromZero =
-      sequenceIds.length === expected.length && sequenceIds.every((value, index) => value === expected[index]);
-
-    if (!isContiguousFromZero) {
-      const first = group[0];
-      errors.push(
-        issue(
-          "error",
-          `sequence_id values for scenario_id "${first.scenario_id}" and config_id "${first.config_id}" must start at 0 and have no gaps.`,
-          "tests.csv"
-        )
-      );
-    }
-  }
+function plannedPairKey(item: Pick<TestRecord | RunRecord, "scenario_id" | "config_id">): string {
+  return `${item.scenario_id} / ${item.config_id}`;
 }
 
 function crossValidate(input: {
@@ -281,14 +255,14 @@ function crossValidate(input: {
 }) {
   const { metrics, topology, saturation, notes, scenarios, configs, tests, runs, measurements, errors, warnings } = input;
   const runIds = uniqueValues(runs.map((run) => run.run_id));
-  const testKeys = uniqueValues(tests.map(testKey));
+  const plannedPairKeys = uniqueValues(tests.map(plannedPairKey));
   const configIds = uniqueValues(configs.map((config) => config.config_id));
   const scenarioIds = uniqueValues(scenarios.map((scenario) => scenario.scenario_id));
   const metricIds = uniqueValues(Object.keys(metrics.metrics));
 
   addDuplicateErrors(scenarios, (scenario) => scenario.scenario_id, "scenarios.csv", "scenario_id", errors);
   addDuplicateErrors(configs, (config) => config.config_id, "configs.csv", "config_id", errors);
-  addDuplicateErrors(tests, testKey, "tests.csv", "test key", errors);
+  addDuplicateErrors(tests, plannedPairKey, "tests.csv", "planned scenario/config pair", errors);
   addDuplicateErrors(runs, (run) => run.run_id, "runs.csv", "run_id", errors);
   addDuplicateErrors(
     measurements,
@@ -333,14 +307,30 @@ function crossValidate(input: {
 
   addGroupedIssues(
     runs,
-    (run) => (!testKeys.has(testKey(run)) ? testKey(run) : undefined),
+    (run) => (!scenarioIds.has(run.scenario_id) ? run.scenario_id : undefined),
     "runs.csv",
     "error",
-    (key, count) => `Run references unknown test "${key}" in ${count} ${rowWord(count)}.`,
+    (scenarioId, count) => `Run references unknown scenario_id "${scenarioId}" in ${count} ${rowWord(count)}.`,
     errors
   );
 
-  validateSequenceIds(tests, errors);
+  addGroupedIssues(
+    runs,
+    (run) => (!configIds.has(run.config_id) ? run.config_id : undefined),
+    "runs.csv",
+    "error",
+    (configId, count) => `Run references unknown config_id "${configId}" in ${count} ${rowWord(count)}.`,
+    errors
+  );
+
+  addGroupedIssues(
+    runs,
+    (run) => (!plannedPairKeys.has(plannedPairKey(run)) ? plannedPairKey(run) : undefined),
+    "runs.csv",
+    "warning",
+    (key, count) => `Run has no planned test entry for scenario/config "${key}" in ${count} ${rowWord(count)}.`,
+    warnings
+  );
 
   addGroupedIssues(
     measurements,

@@ -75,8 +75,7 @@ export const scenarioHelpDocumentSchema: z.ZodType<ScenarioHelpDocument, z.ZodTy
 
 export const testRecordSchema: z.ZodType<TestRecord, z.ZodTypeDef, unknown> = z.object({
   scenario_id: requiredText,
-  config_id: requiredText,
-  sequence_id: sequenceIdCell
+  config_id: requiredText
 });
 
 export const configRecordSchema: z.ZodType<ConfigRecord, z.ZodTypeDef, unknown> = z.object({
@@ -193,7 +192,7 @@ export const notesDocumentSchema: z.ZodType<NotesDocument, z.ZodTypeDef, unknown
 
 export const csvColumns = {
   runs: ["run_id", "scenario_id", "config_id", "sequence_id", "target_tps", "started_at", "duration"],
-  tests: ["scenario_id", "config_id", "sequence_id"],
+  tests: ["scenario_id", "config_id"],
   configs: ["config_id", "exagon_ver", "components_ver"],
   scenarios: ["scenario_id", "name"],
   measurements: ["run_id", "metric_id", "stat", "instance_id", "value"]

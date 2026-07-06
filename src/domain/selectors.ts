@@ -65,6 +65,8 @@ export interface CoverageMatrix {
   unplannedRuns: number;
 }
 
+export type RunTestIdentity = Pick<RunRecord, "scenario_id" | "config_id" | "sequence_id">;
+
 export function formatNumber(value: number | undefined, digits = 2): string {
   if (value === undefined || Number.isNaN(value)) return "-";
   return new Intl.NumberFormat(undefined, {
@@ -106,8 +108,7 @@ export function testForRun(pkg: ImportedPackage, run: RunRecord | undefined): Te
   return pkg.tests.find(
     (test) =>
       test.scenario_id === run.scenario_id &&
-      test.config_id === run.config_id &&
-      test.sequence_id === run.sequence_id
+      test.config_id === run.config_id
   );
 }
 
@@ -126,8 +127,31 @@ export function testNameFor(
 ): string {
   const config = pkg.configs.find((entry) => entry.config_id === item.config_id)!;
   return `${scenarioName(pkg, item.scenario_id)} \u00bb ${config.exagon_ver} \u00bb #${item.sequence_id}`;
-  return `${scenarioName(pkg, item.scenario_id)} » ${config.exagon_ver} » #${item.sequence_id}`;
-  return `${scenarioName(pkg, item.scenario_id)} • ${config.exagon_ver} – #${item.sequence_id}`;
+}
+
+export function runTestIdentities(pkg: ImportedPackage): RunTestIdentity[] {
+  const identities = new Map<string, RunTestIdentity>();
+  for (const run of pkg.runs) {
+    const identity = {
+      scenario_id: run.scenario_id,
+      config_id: run.config_id,
+      sequence_id: run.sequence_id
+    };
+    identities.set(testKeyFor(identity), identity);
+  }
+
+  return [...identities.values()].sort((left, right) => {
+    const leftConfig = pkg.configs.find((config) => config.config_id === left.config_id);
+    const rightConfig = pkg.configs.find((config) => config.config_id === right.config_id);
+    return (
+      scenarioName(pkg, left.scenario_id).localeCompare(scenarioName(pkg, right.scenario_id), undefined, { numeric: true }) ||
+      (leftConfig?.exagon_ver ?? left.config_id).localeCompare(rightConfig?.exagon_ver ?? right.config_id, undefined, {
+        numeric: true
+      }) ||
+      left.config_id.localeCompare(right.config_id, undefined, { numeric: true }) ||
+      left.sequence_id - right.sequence_id
+    );
+  });
 }
 
 export function findMeasurement(
@@ -263,7 +287,7 @@ export function buildRunSummary(pkg: ImportedPackage, run: RunRecord): RunSummar
   const config = configForRun(pkg, run)!;
   const scenarioId = test?.scenario_id ?? run.scenario_id;
   const configId = test?.config_id ?? run.config_id;
-  const sequenceId = test?.sequence_id ?? run.sequence_id;
+  const sequenceId = run.sequence_id;
   const componentsVer = config.components_ver;
   const scenarioDisplayName = scenarioName(pkg, scenarioId);
   const exagonVer = config.exagon_ver;

@@ -22,13 +22,38 @@ function fixtureSource(rootName: string): ImportFileSource {
 }
 
 describe("CPU regression", () => {
-  it("builds one hyperbolic regression row per test identity", async () => {
+  it("builds one hyperbolic regression row per executed run identity", async () => {
     const result = await validateImportSource(fixtureSource("real-perf-import"));
     const rows = buildCpuRegressionRows(result.package!);
+    const runTestKeys = new Set(
+      result.package!.runs.map((run) => `${run.scenario_id} / ${run.config_id} / #${run.sequence_id}`)
+    );
 
-    expect(rows).toHaveLength(21);
-    expect(new Set(rows.map((row) => row.testKey))).toHaveProperty("size", 21);
+    expect(rows).toHaveLength(runTestKeys.size);
+    expect(new Set(rows.map((row) => row.testKey))).toEqual(runTestKeys);
     expect(rows.every((row) => row.sequenceId === 0)).toBe(true);
+  });
+
+  it("does not create regression rows for planned tests without runs", async () => {
+    const result = await validateImportSource(fixtureSource("perf-import"));
+    const pkg = {
+      ...result.package!,
+      tests: [
+        ...result.package!.tests,
+        { scenario_id: "checkout", config_id: "cfg-planned-only" }
+      ],
+      configs: [
+        ...result.package!.configs,
+        { config_id: "cfg-planned-only", exagon_ver: "planned-only", components_ver: "" }
+      ]
+    };
+
+    const rows = buildCpuRegressionRows(pkg);
+
+    expect(rows.some((row) => row.configId === "cfg-planned-only")).toBe(false);
+    expect(rows.map((row) => row.testKey).sort()).toEqual(
+      [...new Set(pkg.runs.map((run) => `${run.scenario_id} / ${run.config_id} / #${run.sequence_id}`))].sort()
+    );
   });
 
   it("matches the known parallel command hyperbolic CPU fit", async () => {

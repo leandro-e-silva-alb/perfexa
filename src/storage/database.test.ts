@@ -32,7 +32,7 @@ function currentPackage(): ImportedPackage {
     notes: { schemaVersion: 1, runs: [], comparisons: [] },
     scenarios: [{ scenario_id: "s1", name: "Scenario" }],
     configs: [{ config_id: "c1", exagon_ver: "6.2.0", components_ver: "" }],
-    tests: [{ scenario_id: "s1", config_id: "c1", sequence_id: 0 }],
+    tests: [{ scenario_id: "s1", config_id: "c1" }],
     runs: [
       {
         run_id: "r1",

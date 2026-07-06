@@ -21,6 +21,7 @@ import {
   formatNumber,
   metricUnit,
   measurementsForScope,
+  runTestIdentities,
   testKeyFor,
   testNameFor,
   type MetricPoint
@@ -239,7 +240,7 @@ export function MetricsExplorerPage() {
 
   const testOptions = useMemo(() => {
     if (!activePackage) return [];
-    return activePackage.tests
+    return runTestIdentities(activePackage)
       .map((test) => ({
         key: testKeyFor(test),
         label: testNameFor(activePackage, test)

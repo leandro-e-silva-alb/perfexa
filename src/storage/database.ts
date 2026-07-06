@@ -254,8 +254,7 @@ class SqliteStorage implements PerfexaStorage {
         package_id TEXT NOT NULL,
         scenario_id TEXT NOT NULL,
         config_id TEXT NOT NULL,
-        sequence_id INTEGER NOT NULL,
-        PRIMARY KEY (package_id, scenario_id, config_id, sequence_id)
+        PRIMARY KEY (package_id, scenario_id, config_id)
       )
     `);
     await this.db.execute(`
@@ -345,8 +344,8 @@ class SqliteStorage implements PerfexaStorage {
 
       for (const test of pkg.tests) {
         await this.db.execute(
-          "INSERT INTO tests (package_id, scenario_id, config_id, sequence_id) VALUES (?, ?, ?, ?)",
-          [pkg.id, test.scenario_id, test.config_id, test.sequence_id]
+          "INSERT INTO tests (package_id, scenario_id, config_id) VALUES (?, ?, ?)",
+          [pkg.id, test.scenario_id, test.config_id]
         );
       }
 
@@ -443,8 +442,9 @@ class SqliteStorage implements PerfexaStorage {
         names.includes("test_id") ||
         names.includes("exagon_ver") ||
         names.includes("components_ver") ||
+        names.includes("sequence_id") ||
         !names.includes("config_id") ||
-        !names.includes("sequence_id")
+        !names.includes("scenario_id")
       ) {
         await this.db.execute("DROP TABLE IF EXISTS tests");
       }

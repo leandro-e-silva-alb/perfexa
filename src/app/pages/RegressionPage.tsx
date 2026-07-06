@@ -91,7 +91,8 @@ export function RegressionPage() {
           />
         </label>
       ),
-      enableSorting: false
+      enableSorting: false,
+      meta: { hideSortMarker: true }
     },
     { id: "scenario", header: "Scenario", accessorKey: "scenario" },
     { id: "exagonVersion", header: "Exagon version", accessorKey: "exagonVersion" },

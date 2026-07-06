@@ -45,7 +45,6 @@ export interface ScenarioHelpDocument {
 export interface TestRecord {
   scenario_id: string;
   config_id: string;
-  sequence_id: number;
 }
 
 export interface ConfigRecord {

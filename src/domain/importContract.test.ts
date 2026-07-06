@@ -72,8 +72,8 @@ comparisons: []
   "runs.csv": `run_id,scenario_id,config_id,sequence_id,target_tps,started_at,duration
 run-001,checkout,cfg-main,0,300,2026-06-20T09:00:00Z,30m
 `,
-  "tests.csv": `scenario_id,config_id,sequence_id
-checkout,cfg-main,0
+  "tests.csv": `scenario_id,config_id
+checkout,cfg-main
 `,
   "configs.csv": `config_id,exagon_ver,components_ver
 cfg-main,3.13.0,"kafka:3.7.0"
@@ -285,7 +285,7 @@ scenarios:
     expect(result.report.errors.some((error) => error.message.includes("queue_depth"))).toBe(true);
   });
 
-  it("aggregates repeated run test reference errors by offending value", async () => {
+  it("aggregates repeated run config reference errors by offending value", async () => {
     const result = await validateImportSource(
       source({
         ...validFiles,
@@ -297,15 +297,15 @@ run-003,checkout,other-missing,0,600,2026-06-20T11:00:00Z,30m
       })
     );
 
-    const unknownTestErrors = result.report.errors.filter((error) =>
-      error.message.includes("Run references unknown test")
+    const unknownConfigErrors = result.report.errors.filter((error) =>
+      error.message.includes("Run references unknown config_id")
     );
 
-    expect(unknownTestErrors).toHaveLength(2);
-    expect(unknownTestErrors).toContainEqual({
+    expect(unknownConfigErrors).toHaveLength(2);
+    expect(unknownConfigErrors).toContainEqual({
       severity: "error",
       file: "runs.csv",
-      message: 'Run references unknown test "checkout / missing-config / #0" in 2 rows.'
+      message: 'Run references unknown config_id "missing-config" in 2 rows.'
     });
   });
 
@@ -313,8 +313,8 @@ run-003,checkout,other-missing,0,600,2026-06-20T11:00:00Z,30m
     const result = await validateImportSource(
       source({
         ...validFiles,
-        "tests.csv": `scenario_id,config_id,sequence_id
-missing-scenario,cfg-main,0
+        "tests.csv": `scenario_id,config_id
+missing-scenario,cfg-main
 `
       })
     );
@@ -331,8 +331,8 @@ missing-scenario,cfg-main,0
     const result = await validateImportSource(
       source({
         ...validFiles,
-        "tests.csv": `scenario_id,config_id,sequence_id
-checkout,missing-config,0
+        "tests.csv": `scenario_id,config_id
+checkout,missing-config
 `
       })
     );

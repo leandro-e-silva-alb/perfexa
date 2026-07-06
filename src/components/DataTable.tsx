@@ -63,31 +63,35 @@ export function DataTable<TData>({
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <th key={header.id}>
-                    {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                      <button
-                        className="th-button"
-                        type="button"
-                        onClick={header.column.getToggleSortingHandler()}
-                      >
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                        <span className="sort-mark">
-                          {header.column.getIsSorted() === "asc"
-                            ? "A-Z"
-                            : header.column.getIsSorted() === "desc"
-                              ? "Z-A"
-                            : ""}
+                {headerGroup.headers.map((header) => {
+                  const meta = header.column.columnDef.meta as { hideSortMarker?: boolean } | undefined;
+
+                  return (
+                    <th key={header.id}>
+                      {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                        <button
+                          className="th-button"
+                          type="button"
+                          onClick={header.column.getToggleSortingHandler()}
+                        >
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                          <span className="sort-mark">
+                            {header.column.getIsSorted() === "asc"
+                              ? "A-Z"
+                              : header.column.getIsSorted() === "desc"
+                                ? "Z-A"
+                                : ""}
+                          </span>
+                        </button>
+                      ) : (
+                        <span className="th-button th-static">
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                          {meta?.hideSortMarker ? null : <span className="sort-mark" />}
                         </span>
-                      </button>
-                    ) : (
-                      <span className="th-button th-static">
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                        <span className="sort-mark" />
-                      </span>
-                    )}
-                  </th>
-                ))}
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
             ))}
           </thead>

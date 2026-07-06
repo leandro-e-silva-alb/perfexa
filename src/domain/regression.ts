@@ -1,7 +1,7 @@
 import { evaluateSaturationByRun } from "./saturation";
 import { scenarioName, testKeyFor } from "./selectors";
 import { buildTopologyGraph, resolveTopologyMeasurements } from "./topologyMetrics";
-import type { ImportedPackage, MeasurementRecord, RunRecord, TestRecord } from "./types";
+import type { ImportedPackage, MeasurementRecord, RunRecord } from "./types";
 
 export interface RegressionPoint {
   effectiveTps: number;
@@ -155,7 +155,7 @@ function buildMaxThrottlingByRun(pkg: ImportedPackage): Map<string, number> {
   return result;
 }
 
-function createGroup(pkg: ImportedPackage, test: TestRecord | RunRecord): RegressionGroup {
+function createGroup(pkg: ImportedPackage, test: RunRecord): RegressionGroup {
   const config = pkg.configs.find((entry) => entry.config_id === test.config_id);
 
   return {
@@ -178,10 +178,6 @@ export function buildCpuRegressionAnalyses(pkg: ImportedPackage): CpuRegressionA
   const latencyAvgByRun = buildRunLevelMeasurementByRun(pkg.measurements, "latency", "avg");
   const maxThrottlingByRun = buildMaxThrottlingByRun(pkg);
   const saturationByRun = evaluateSaturationByRun(pkg);
-
-  for (const test of pkg.tests) {
-    groups.set(testKeyFor(test), createGroup(pkg, test));
-  }
 
   for (const run of pkg.runs) {
     const key = testKeyFor(run);

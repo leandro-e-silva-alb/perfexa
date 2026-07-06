@@ -33,7 +33,7 @@ function pkg(measurements: MeasurementRecord[]): ImportedPackage {
     notes: { schemaVersion: 1, runs: [], comparisons: [] },
     scenarios: [{ scenario_id: "scenario", name: "Scenario" }],
     configs: [{ config_id: "config", exagon_ver: "6.3.0", components_ver: "" }],
-    tests: [{ scenario_id: "scenario", config_id: "config", sequence_id: 0 }],
+    tests: [{ scenario_id: "scenario", config_id: "config" }],
     runs: [
       {
         run_id: "run-1",
@@ -112,9 +112,9 @@ describe("coverage selectors", () => {
         { config_id: "cfg-c", exagon_ver: "3.0.0", components_ver: "" }
       ],
       tests: [
-        { scenario_id: "checkout", config_id: "cfg-a", sequence_id: 0 },
-        { scenario_id: "checkout", config_id: "cfg-b", sequence_id: 0 },
-        { scenario_id: "browse", config_id: "cfg-b", sequence_id: 0 }
+        { scenario_id: "checkout", config_id: "cfg-a" },
+        { scenario_id: "checkout", config_id: "cfg-b" },
+        { scenario_id: "browse", config_id: "cfg-b" }
       ],
       runs: [
         {

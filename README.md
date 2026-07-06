@@ -96,8 +96,8 @@ measurements.csv
 
 Key CSV identities:
 
-- Tests are identified by `scenario_id`, `config_id`, and `sequence_id`.
-- Runs belong to tests and include `run_id`, `target_tps`, timing, and duration data.
+- `tests.csv` is the planned scenario/config catalog and is identified by `scenario_id` and `config_id`.
+- `runs.csv` is the execution source of truth and includes `run_id`, `scenario_id`, `config_id`, `sequence_id`, `target_tps`, timing, and duration data.
 - Measurements use `run_id`, `metric_id`, `stat`, `instance_id`, and `value`.
 
 Topology is configured in `topology.yaml` using layers and nodes. Metrics are configured in `metrics.yaml` with aggregation rules such as `sum`, `average`, `ratio`, `percentage`, and `max`.
