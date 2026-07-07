@@ -1,22 +1,29 @@
 scenario_id,name
-choreography,Coreografia
+choreography,Choreography
 parallel_command,Parallel Command
-rwro_consistent,RW/RO Consistent
-rwro_none,RW/RO CacheNone
-rwro_optimized_heap,RW/RO Optimized Heap
-rwro_optimized_kvs,RW/RO Optimized KVS
+rwro_consistent,RW/RO Consistent  - 10k Entities
+rwro_none,RW/RO CacheNone  - 10k Entities
+rwro_optimized_heap,RW/RO Optimized Heap - 10k Entities
+rwro_optimized_kvs,RW/RO Optimized KVS - 10k Entities
 ext_request,External Request
 subsaga,Subsaga
 deferred,Saga Deferred
 simple,Saga Simple
 scheduled,Saga Scheduled
 transient,Transient
-rw_consistent,RW Consistent
-rw_none,RW CacheNone
-rw_optimized_heap,RW Optimized Heap
-rw_optimized_kvs,RW Optimized KVS
+rw_consistent,RW Consistent - 1k Entities
+rw_none,RW CacheNone - 1k Entities
+rw_optimized_heap,RW Optimized Heap - 1k Entities
+rw_optimized_kvs,RW Optimized KVS - 1k Entities
 local_consistent,Local Consistent
 local_none,Local CacheNone
 local_optimized_heap,Local Optimized Heap
 local_optimized_kvs,Local Optimized KVS
 query,Query
+create_validation,Create w/ Validation
+create,Create wo/ Validation
+rollback_1,Rollback 1%
+rollback_10,Rollback 10%
+get_prefix_1,GetByPrefix 1 Entity
+get_prefix_27,GetByPrefix 27 Entities
+get_prefix_703,GetByPrefix 703 Entity

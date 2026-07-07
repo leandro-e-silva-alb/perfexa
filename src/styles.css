@@ -184,7 +184,7 @@ button:disabled {
 .main-view {
   position: relative;
   min-width: 0;
-  padding: 24px;
+  padding: 0 24px;
   max-height: 100vh;
   overflow-y: scroll;
 }
@@ -254,7 +254,7 @@ button:disabled {
   display: grid;
   gap: 16px;
   max-width: 1480px;
-  margin: 0 auto;
+  margin: 24px auto;
 }
 
 .page-stack-wide {
@@ -360,9 +360,26 @@ button:disabled {
   border-color: var(--accent-strong);
 }
 
+.button-danger {
+  color: var(--bad);
+  border-color: #efc5c0;
+}
+
+.button-danger:hover:not(:disabled) {
+  color: #ffffff;
+  background: var(--bad);
+  border-color: var(--bad);
+}
+
 .button-small {
   min-height: 30px;
   padding: 0 10px;
+}
+
+.library-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .icon-button {
@@ -1097,11 +1114,6 @@ button:disabled {
   border-bottom: 1px solid var(--border);
 }
 
-.coverage-table tr:last-child th,
-.coverage-table tr:last-child td {
-  border-bottom: 0;
-}
-
 .coverage-table th:last-child,
 .coverage-table td:last-child {
   border-right: 0;
@@ -1112,12 +1124,20 @@ button:disabled {
   top: 0;
   z-index: 2;
   min-width: 136px;
-  height: 58px;
   padding: 9px 11px;
   color: #39434f;
   background: var(--surface-muted);
   text-align: center;
   vertical-align: middle;
+}
+
+.coverage-table thead tr:first-child th {
+  height: 38px;
+}
+
+.coverage-table thead tr:nth-child(2) th {
+  top: 38px;
+  height: 66px;
 }
 
 .coverage-table tbody th {
@@ -1136,7 +1156,49 @@ button:disabled {
 .coverage-table .coverage-scenario-head {
   left: 0;
   z-index: 3;
+  height: 104px;
   text-align: left;
+}
+
+.coverage-scenario-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  font-weight: 750;
+  text-align: left;
+}
+
+.coverage-scenario-sort-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.coverage-scenario-sort:hover .coverage-scenario-sort-mark {
+  color: var(--text);
+}
+
+.coverage-table .coverage-config-patch-head {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  background: #eef3f8;
+}
+
+.coverage-table .coverage-config-version-head {
+  background: #f7f9fb;
 }
 
 .coverage-table tbody tr:hover th,
@@ -1195,6 +1257,19 @@ button:disabled {
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.coverage-config-heading .coverage-rc-tag {
+  justify-self: center;
+  max-width: 100%;
+  padding: 3px 7px;
+  border: 1px solid #d8e1eb;
+  border-radius: 999px;
+  color: #536273;
+  background: #ffffff;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.2;
 }
 
 .coverage-cell-value {

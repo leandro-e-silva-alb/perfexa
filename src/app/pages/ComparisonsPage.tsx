@@ -365,9 +365,8 @@ export function ComparisonsPage() {
     }))
   };
   const metricsRows = [
-    { label: "TestID", value: (row: CpuRegressionAnalysis) => row.testKey },
     { label: "Scenario", value: (row: CpuRegressionAnalysis) => row.scenario },
-    { label: "Exagon_ver", value: (row: CpuRegressionAnalysis) => row.exagonVersion },
+    { label: "Exagon version", value: (row: CpuRegressionAnalysis) => row.exagonVersion },
     { label: "Config ID", value: (row: CpuRegressionAnalysis) => row.configId },
     { label: "Base CPU (idle)", value: (row: CpuRegressionAnalysis) => formatFixed(row.idle, 6) },
     { label: "Marginal CPU (L)", value: (row: CpuRegressionAnalysis) => formatFixed(row.marginalCpu, 9) },
@@ -622,7 +621,7 @@ export function ComparisonsPage() {
             </thead>
             <tbody>
               <tr>
-                <th>Cost: CPU(TPS)</th>
+                <th>Sizing: CPU(TPS)</th>
                 <td>
                   <label className="compare-inline-input">
                     <input
@@ -639,7 +638,7 @@ export function ComparisonsPage() {
                 })}
               </tr>
               <tr>
-                <th>Efficiency: TPS(CPU)</th>
+                <th>Throughput: TPS(CPU)</th>
                 <td>
                   <label className="compare-inline-input">
                     <input

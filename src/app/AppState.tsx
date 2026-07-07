@@ -17,6 +17,7 @@ interface AppStateValue {
   setComparisonTestKeys(testKeys: string[]): void;
   selectPackage(id: string): void;
   saveImportedPackage(pkg: ImportedPackage): Promise<void>;
+  deleteImportedPackage(id: string): Promise<void>;
   updateActivePackageNotes(notes: NotesDocument): Promise<void>;
   reloadPackages(): Promise<void>;
 }
@@ -98,6 +99,26 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function deleteImportedPackage(id: string) {
+    if (!storage) throw new Error("Storage is not ready yet.");
+    setOperationBusy(true);
+    setBusyLabel("Deleting package");
+    try {
+      await storage.deletePackage(id);
+      const loaded = await storage.listPackages();
+      setPackages(loaded);
+      setActivePackageId((current) => (current === id ? loaded[0]?.id : current));
+      if (activePackageId === id) {
+        setComparisonTestKeysState([]);
+      }
+    } catch (error) {
+      console.error("Unable to delete imported package.", error);
+      throw error;
+    } finally {
+      setOperationBusy(false);
+    }
+  }
+
   async function updateActivePackageNotes(notes: NotesDocument) {
     if (!storage || !activePackage) return;
     setOperationBusy(true);
@@ -147,6 +168,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setComparisonTestKeys,
     selectPackage,
     saveImportedPackage,
+    deleteImportedPackage,
     updateActivePackageNotes,
     reloadPackages
   };

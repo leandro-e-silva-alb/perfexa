@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCoverageMatrix, measurementsForScope, testKeyFor } from "./selectors";
+import { buildCoverageMatrix, exagonPatchVersion, measurementsForScope, testKeyFor } from "./selectors";
 import type { ImportedPackage, MeasurementRecord } from "./types";
 
 function measurement(
@@ -151,7 +151,7 @@ describe("coverage selectors", () => {
     const checkout = matrix.rows.find((row) => row.scenario_id === "checkout")!;
     const browse = matrix.rows.find((row) => row.scenario_id === "browse")!;
 
-    expect(matrix.configs.map((config) => config.config_id)).toEqual(["cfg-a", "cfg-b", "cfg-c"]);
+    expect(matrix.configs.map((config) => config.config_id)).toEqual(["cfg-c", "cfg-b", "cfg-a"]);
     expect(Object.fromEntries(checkout.cells.map((cell) => [cell.config_id, cell.value]))).toEqual({
       "cfg-a": 2,
       "cfg-b": 0,
@@ -166,5 +166,57 @@ describe("coverage selectors", () => {
     expect(matrix.coveredPairs).toBe(1);
     expect(matrix.pendingPairs).toBe(2);
     expect(matrix.unplannedRuns).toBe(1);
+  });
+
+  it("groups configs by Exagon patch version", () => {
+    const data: ImportedPackage = {
+      ...pkg([]),
+      configs: [
+        {
+          config_id: "cfg-cd4150b9",
+          exagon_ver: "6.3.2-SNAPSHOT",
+          components_ver: "usrv-a:3.13.0-rc547,usrv-b:3.13.0-rc152,usrv-c:3.13.0-rc94"
+        },
+        {
+          config_id: "cfg-672fd4a2",
+          exagon_ver: "dev-6.2.0-SNAPSHOT",
+          components_ver: "usrv-a:3.12.0-rc506,usrv-b:3.12.0-rc112,usrv-c:3.12.0-rc52"
+        },
+        {
+          config_id: "cfg-77476a3e",
+          exagon_ver: "dev-6.3.0-SNAPSHOT",
+          components_ver: "usrv-a:3.13.0-rc528,usrv-b:3.13.0-rc133,usrv-c:3.13.0-rc73"
+        },
+        {
+          config_id: "cfg-e8c9c6d6",
+          exagon_ver: "dev-6.3.0-SNAPSHOT",
+          components_ver: "usrv-a:3.13.0-rc523,usrv-b:3.13.0-rc127,usrv-c:3.13.0-rc67"
+        }
+      ],
+      tests: [
+        { scenario_id: "scenario", config_id: "cfg-cd4150b9" },
+        { scenario_id: "scenario", config_id: "cfg-672fd4a2" },
+        { scenario_id: "scenario", config_id: "cfg-77476a3e" },
+        { scenario_id: "scenario", config_id: "cfg-e8c9c6d6" }
+      ],
+      runs: []
+    };
+
+    const matrix = buildCoverageMatrix(data);
+
+    expect(exagonPatchVersion("6.3.1")).toBe("6.3.1");
+    expect(exagonPatchVersion("6.3.2-SNAPSHOT")).toBe("6.3.2");
+    expect(exagonPatchVersion("dev-6.2.0-SNAPSHOT")).toBe("6.2.0");
+    expect(matrix.configs.map((config) => [config.config_id, config.label, config.versionPatch, config.rcSummary])).toEqual([
+      ["cfg-cd4150b9", "6.3.2-SNAPSHOT", "6.3.2", "rc547 / rc152 / rc94"],
+      ["cfg-77476a3e", "dev-6.3.0-SNAPSHOT", "6.3.0", "rc528 / rc133 / rc73"],
+      ["cfg-e8c9c6d6", "dev-6.3.0-SNAPSHOT", "6.3.0", "rc523 / rc127 / rc67"],
+      ["cfg-672fd4a2", "dev-6.2.0-SNAPSHOT", "6.2.0", "rc506 / rc112 / rc52"]
+    ]);
+    expect(matrix.configGroups).toEqual([
+      { versionPatch: "6.3.2", colSpan: 1 },
+      { versionPatch: "6.3.0", colSpan: 2 },
+      { versionPatch: "6.2.0", colSpan: 1 }
+    ]);
   });
 });

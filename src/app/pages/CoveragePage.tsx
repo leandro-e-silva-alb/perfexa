@@ -1,20 +1,29 @@
-import { CircleHelp } from "lucide-react";
+import { ArrowDownAZ, ArrowDownZA, CircleHelp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { HelpModal } from "../../components/HelpModal";
 import { StatusPill } from "../../components/StatusPill";
-import { buildCoverageMatrix, formatDateTime, formatNumber, type CoverageMatrixCell } from "../../domain/selectors";
+import {
+  buildCoverageMatrix,
+  formatDateTime,
+  formatNumber,
+  type CoverageMatrixCell,
+  type CoverageMatrixConfig
+} from "../../domain/selectors";
 import type { ScenarioHelpEntry } from "../../domain/types";
 import { useAppState } from "../AppState";
+
+type ScenarioSortDirection = "asc" | "desc";
 
 function cellTone(cell: CoverageMatrixCell): string {
   if (!cell.planned) return "coverage-cell-unplanned";
   return cell.runCount > 0 ? "coverage-cell-covered" : "coverage-cell-pending";
 }
 
-function cellTitle(cell: CoverageMatrixCell): string {
-  if (!cell.planned) return `${cell.scenario_id} / ${cell.config_id}: not planned`;
-  if (cell.runCount === 0) return `${cell.scenario_id} / ${cell.config_id}: planned, not executed`;
-  return `${cell.scenario_id} / ${cell.config_id}: ${cell.runCount} executed`;
+function cellTitle(cell: CoverageMatrixCell, config: CoverageMatrixConfig | undefined): string {
+  const configLabel = config?.label ?? cell.config_id;
+  if (!cell.planned) return `${cell.scenario_id} / ${configLabel}: not planned`;
+  if (cell.runCount === 0) return `${cell.scenario_id} / ${configLabel}: planned, not executed`;
+  return `${cell.scenario_id} / ${configLabel}: ${cell.runCount} executed`;
 }
 
 function ScenarioHelpContent({ help }: { help: ScenarioHelpEntry }) {
@@ -61,10 +70,21 @@ function ScenarioHelpContent({ help }: { help: ScenarioHelpEntry }) {
 export function CoveragePage() {
   const { activePackage, setView } = useAppState();
   const [selectedHelpScenarioId, setSelectedHelpScenarioId] = useState<string | undefined>();
+  const [scenarioSortDirection, setScenarioSortDirection] = useState<ScenarioSortDirection>("asc");
   const matrix = useMemo(
     () => (activePackage ? buildCoverageMatrix(activePackage) : undefined),
     [activePackage]
   );
+  const sortedRows = useMemo(() => {
+    if (!matrix) return [];
+
+    return [...matrix.rows].sort((left, right) => {
+      const comparison =
+        left.scenario_name.localeCompare(right.scenario_name, undefined, { numeric: true }) ||
+        left.scenario_id.localeCompare(right.scenario_id, undefined, { numeric: true });
+      return scenarioSortDirection === "asc" ? comparison : -comparison;
+    });
+  }, [matrix, scenarioSortDirection]);
 
   if (!activePackage || !matrix) {
     return (
@@ -82,6 +102,8 @@ export function CoveragePage() {
   const coverageTone = matrix.pendingPairs === 0 && matrix.plannedPairs > 0 ? "ok" : "warn";
   const helpByScenario = activePackage.scenarioHelp?.scenarios ?? {};
   const selectedScenarioHelp = selectedHelpScenarioId ? helpByScenario[selectedHelpScenarioId] : undefined;
+  const ScenarioSortIcon = scenarioSortDirection === "asc" ? ArrowDownAZ : ArrowDownZA;
+  const nextScenarioSortDirection = scenarioSortDirection === "asc" ? "Z-A" : "A-Z";
 
   return (
     <div className="page-stack page-stack-wide">
@@ -117,26 +139,63 @@ export function CoveragePage() {
           <table className="coverage-table">
             <thead>
               <tr>
-                <th className="coverage-scenario-head">Scenario</th>
+                <th
+                  className="coverage-scenario-head"
+                  rowSpan={2}
+                  aria-sort={scenarioSortDirection === "asc" ? "ascending" : "descending"}
+                >
+                  <button
+                    className="coverage-scenario-sort"
+                    type="button"
+                    title={`Sort scenarios ${nextScenarioSortDirection}`}
+                    aria-label={`Sort scenarios ${nextScenarioSortDirection}`}
+                    onClick={() =>
+                      setScenarioSortDirection((current) => (current === "asc" ? "desc" : "asc"))
+                    }
+                  >
+                    <span>Scenario</span>
+                    <span className="coverage-scenario-sort-mark">
+                      <ScenarioSortIcon size={15} aria-hidden="true" />
+                      {scenarioSortDirection === "asc" ? "A-Z" : "Z-A"}
+                    </span>
+                  </button>
+                </th>
+                {matrix.configGroups.map((group) => (
+                  <th
+                    className="coverage-config-patch-head"
+                    key={group.versionPatch}
+                    colSpan={group.colSpan}
+                    scope="colgroup"
+                  >
+                    {group.versionPatch}
+                  </th>
+                ))}
+              </tr>
+              <tr>
                 {matrix.configs.map((config) => (
-                  <th key={config.config_id}>
+                  <th
+                    className="coverage-config-version-head"
+                    key={config.config_id}
+                    scope="col"
+                    title={config.componentSummary}
+                  >
                     <span className="coverage-config-heading">
                       <strong>{config.label}</strong>
-                      <small>{config.config_id}</small>
+                      {config.rcSummary ? <small className="coverage-rc-tag">{config.rcSummary}</small> : null}
                     </span>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {matrix.rows.length === 0 || matrix.configs.length === 0 ? (
+              {sortedRows.length === 0 || matrix.configs.length === 0 ? (
                 <tr>
                   <td className="empty-cell" colSpan={Math.max(1, matrix.configs.length + 1)}>
                     No scenarios or configs
                   </td>
                 </tr>
               ) : (
-                matrix.rows.map((row) => {
+                sortedRows.map((row) => {
                   const scenarioHelp = helpByScenario[row.scenario_id];
 
                   return (
@@ -159,13 +218,21 @@ export function CoveragePage() {
                           ) : null}
                         </span>
                       </th>
-                      {row.cells.map((cell) => (
-                        <td key={`${cell.scenario_id}:${cell.config_id}`} className={cellTone(cell)} title={cellTitle(cell)}>
-                          <span className="coverage-cell-value">
-                            {cell.value === "-" ? "-" : formatNumber(cell.value, 0)}
-                          </span>
-                        </td>
-                      ))}
+                      {row.cells.map((cell, configIndex) => {
+                        const config = matrix.configs[configIndex];
+
+                        return (
+                          <td
+                            key={`${cell.scenario_id}:${cell.config_id}`}
+                            className={cellTone(cell)}
+                            title={cellTitle(cell, config)}
+                          >
+                            <span className="coverage-cell-value">
+                              {cell.value === "-" ? "-" : formatNumber(cell.value, 0)}
+                            </span>
+                          </td>
+                        );
+                      })}
                     </tr>
                   );
                 })

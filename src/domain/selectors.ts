@@ -54,10 +54,19 @@ export interface CoverageMatrixRow {
 export interface CoverageMatrixConfig {
   config_id: string;
   label: string;
+  versionPatch: string;
+  rcSummary?: string;
+  componentSummary?: string;
+}
+
+export interface CoverageMatrixConfigGroup {
+  versionPatch: string;
+  colSpan: number;
 }
 
 export interface CoverageMatrix {
   configs: CoverageMatrixConfig[];
+  configGroups: CoverageMatrixConfigGroup[];
   rows: CoverageMatrixRow[];
   plannedPairs: number;
   coveredPairs: number;
@@ -97,6 +106,71 @@ export function formatDateTime(value: string | undefined): string {
 
 function pairKey(scenarioId: string, configId: string): string {
   return `${scenarioId}\u0000${configId}`;
+}
+
+export function exagonPatchVersion(version: string): string {
+  return version.match(/\d+(?:\.\d+){2}/)?.[0] ?? version;
+}
+
+function comparePatchVersion(left: string, right: string): number {
+  const leftParts = left.split(".").map(Number);
+  const rightParts = right.split(".").map(Number);
+  const leftIsPatch = leftParts.length === 3 && leftParts.every((part) => Number.isInteger(part));
+  const rightIsPatch = rightParts.length === 3 && rightParts.every((part) => Number.isInteger(part));
+
+  if (leftIsPatch && rightIsPatch) {
+    for (let index = 0; index < leftParts.length; index += 1) {
+      const delta = leftParts[index] - rightParts[index];
+      if (delta !== 0) return delta;
+    }
+    return 0;
+  }
+
+  return left.localeCompare(right, undefined, { numeric: true });
+}
+
+interface ComponentVersionEntry {
+  component_id: string;
+  version: string;
+}
+
+function componentVersionEntries(componentsVer: string): ComponentVersionEntry[] {
+  return componentsVer
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const separatorIndex = item.indexOf(":");
+      if (separatorIndex === -1) return { component_id: item, version: "" };
+      return {
+        component_id: item.slice(0, separatorIndex).trim(),
+        version: item.slice(separatorIndex + 1).trim()
+      };
+    });
+}
+
+function componentRcSummary(componentsVer: string): string | undefined {
+  const rcLabels = componentVersionEntries(componentsVer)
+    .map((component) => component.version.match(/\brc\d+\b/i)?.[0])
+    .filter((label): label is string => Boolean(label));
+
+  return rcLabels.length > 0 ? rcLabels.join(" / ") : undefined;
+}
+
+function firstComponentRcNumber(componentsVer: string | undefined): number | undefined {
+  if (!componentsVer) return undefined;
+  const firstRc = componentVersionEntries(componentsVer)
+    .map((component) => component.version.match(/\brc(\d+)\b/i)?.[1])
+    .find((value): value is string => Boolean(value));
+  return firstRc ? Number(firstRc) : undefined;
+}
+
+function compareFirstComponentRc(left: ConfigRecord | undefined, right: ConfigRecord | undefined): number {
+  const leftRc = firstComponentRcNumber(left?.components_ver);
+  const rightRc = firstComponentRcNumber(right?.components_ver);
+
+  if (leftRc === undefined || rightRc === undefined) return 0;
+  return leftRc - rightRc;
 }
 
 export function scenarioName(pkg: ImportedPackage, scenarioId: string): string {
@@ -171,19 +245,7 @@ export function findMeasurement(
 }
 
 export function componentVersionSummary(pkg: ImportedPackage, componentsVer: string): string {
-  const entries = componentsVer
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map((item) => {
-      const separatorIndex = item.indexOf(":");
-      if (separatorIndex === -1) return { component_id: item, version: "" };
-      return {
-        component_id: item.slice(0, separatorIndex).trim(),
-        version: item.slice(separatorIndex + 1).trim()
-      };
-    });
-
+  const entries = componentVersionEntries(componentsVer);
   const preferred = entries.filter((component) =>
     ["usrv-a", "usrv-b", "usrv-c", "im", "kafka", "redis", "mongo"].includes(component.component_id)
   );
@@ -243,16 +305,35 @@ export function buildCoverageMatrix(pkg: ImportedPackage): CoverageMatrix {
     const rightConfig = configEntries.get(right);
     const leftLabel = leftConfig?.exagon_ver ?? left;
     const rightLabel = rightConfig?.exagon_ver ?? right;
-    return leftLabel.localeCompare(rightLabel, undefined, { numeric: true });
-  });
+    return (
+      comparePatchVersion(exagonPatchVersion(leftLabel), exagonPatchVersion(rightLabel)) ||
+      leftLabel.localeCompare(rightLabel, undefined, { numeric: true }) ||
+      compareFirstComponentRc(leftConfig, rightConfig) ||
+      left.localeCompare(right, undefined, { numeric: true })
+    );
+  }).reverse();
 
   const configs = orderedConfigIds.map((configId) => {
     const config = configEntries.get(configId);
+    const label = config?.exagon_ver ?? configId;
+    const componentSummary = config?.components_ver ? componentVersionSummary(pkg, config.components_ver) : undefined;
     return {
       config_id: configId,
-      label: config?.exagon_ver ?? configId
+      label,
+      versionPatch: exagonPatchVersion(label),
+      rcSummary: config?.components_ver ? componentRcSummary(config.components_ver) : undefined,
+      componentSummary
     };
   });
+  const configGroups = configs.reduce<CoverageMatrixConfigGroup[]>((groups, config) => {
+    const previousGroup = groups[groups.length - 1];
+    if (previousGroup?.versionPatch === config.versionPatch) {
+      previousGroup.colSpan += 1;
+    } else {
+      groups.push({ versionPatch: config.versionPatch, colSpan: 1 });
+    }
+    return groups;
+  }, []);
 
   const rows = orderedScenarioIds.map((scenarioId) => ({
     scenario_id: scenarioId,
@@ -274,6 +355,7 @@ export function buildCoverageMatrix(pkg: ImportedPackage): CoverageMatrix {
 
   return {
     configs,
+    configGroups,
     rows,
     plannedPairs: plannedPairs.size,
     coveredPairs,

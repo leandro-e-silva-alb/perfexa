@@ -246,7 +246,7 @@ scenarios:
     const result = await validateImportSource(fixtureSource("real-perf-import"));
 
     expect(result.report.valid).toBe(true);
-    expect(result.package?.runs).toHaveLength(66);
+    expect(result.package?.runs).toHaveLength(81);
     expect(result.package?.configs).toHaveLength(4);
   });
 

@@ -26,6 +26,29 @@ function average(values: number[]): number | null {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function nullableNumberSort<TData>(
+  left: { original: TData },
+  right: { original: TData },
+  columnId: string
+): number {
+  const leftValue = (left.original as Record<string, number | null>)[columnId];
+  const rightValue = (right.original as Record<string, number | null>)[columnId];
+
+  if (leftValue === null && rightValue === null) {
+    return 0;
+  }
+
+  if (leftValue === null) {
+    return 1;
+  }
+
+  if (rightValue === null) {
+    return -1;
+  }
+
+  return leftValue - rightValue;
+}
+
 export function RegressionPage() {
   const { activePackage, setComparisonTestKeys, setView } = useAppState();
   const [selectedTestKeys, setSelectedTestKeys] = useState<string[]>([]);
@@ -100,27 +123,44 @@ export function RegressionPage() {
     {
       id: "idle",
       header: "Base CPU (idle)",
+      accessorKey: "idle",
+      sortingFn: nullableNumberSort,
       cell: ({ row }) => formatFixed(row.original.idle, 2)
     },
     {
       id: "marginalCpu",
       header: "Incremental CPU (L)",
+      accessorKey: "marginalCpu",
+      sortingFn: nullableNumberSort,
       cell: ({ row }) => formatFixed(row.original.marginalCpu, 4)
     },
     {
       id: "transientOverhead",
       header: "Transient CPU overhead (extra)",
+      accessorKey: "transientOverhead",
+      sortingFn: nullableNumberSort,
       cell: ({ row }) => formatFixed(row.original.transientOverhead, 2)
     },
     {
       id: "halfSaturationK",
       header: "Overhead half-saturation const. (k)",
+      accessorKey: "halfSaturationK",
+      sortingFn: nullableNumberSort,
       cell: ({ row }) => formatFixed(row.original.halfSaturationK, 2)
     },
     {
       id: "rSquared",
       header: "R2",
+      accessorKey: "rSquared",
+      sortingFn: nullableNumberSort,
       cell: ({ row }) => (row.original.rSquared === null ? "-" : formatFixed(row.original.rSquared, 4))
+    },
+    {
+      id: "rmse",
+      header: "RMSE",
+      accessorKey: "rmse",
+      sortingFn: nullableNumberSort,
+      cell: ({ row }) => formatFixed(row.original.rmse, 2)
     },
     {
       id: "points",

@@ -1,4 +1,4 @@
-import { SlidersHorizontal } from "lucide-react";
+import { Loader2, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "../../components/DataTable";
@@ -44,9 +44,11 @@ function toLibraryRow(pkg: ImportedPackage): LibraryRow {
 }
 
 export function LibraryPage() {
-  const { packages, selectPackage, setView } = useAppState();
+  const { deleteImportedPackage, packages, selectPackage, setView } = useAppState();
   const [scenarioFilter, setScenarioFilter] = useState("all");
   const [saturationFilter, setSaturationFilter] = useState("all");
+  const [deletingPackageId, setDeletingPackageId] = useState<string>();
+  const [deleteError, setDeleteError] = useState<string>();
 
   const scenarios = useMemo(
     () => ["all", ...new Set(packages.flatMap((pkg) => pkg.scenarios.map((scenario) => scenario.name)))],
@@ -63,6 +65,21 @@ export function LibraryPage() {
         return true;
       });
   }, [packages, saturationFilter, scenarioFilter]);
+
+  async function handleDeletePackage(row: LibraryRow) {
+    const confirmed = window.confirm(`Delete "${row.name}" from the library? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setDeletingPackageId(row.id);
+    setDeleteError(undefined);
+    try {
+      await deleteImportedPackage(row.id);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "The package could not be deleted.");
+    } finally {
+      setDeletingPackageId(undefined);
+    }
+  }
 
   const columns: ColumnDef<LibraryRow>[] = [
     { header: "Package", accessorKey: "name" },
@@ -88,10 +105,23 @@ export function LibraryPage() {
       header: "",
       id: "action",
       cell: ({ row }) => (
-        <button className="button button-small" type="button" onClick={() => selectPackage(row.original.id)}>
-          Open
-        </button>
-      )
+        <span className="library-actions">
+          <button className="button button-small" type="button" onClick={() => selectPackage(row.original.id)}>
+            Open
+          </button>
+          <button
+            className="button button-small button-danger"
+            type="button"
+            title={`Delete ${row.original.name}`}
+            aria-label={`Delete ${row.original.name}`}
+            onClick={() => handleDeletePackage(row.original)}
+            disabled={deletingPackageId === row.original.id}
+          >
+            {deletingPackageId === row.original.id ? <Loader2 className="spin" size={15} /> : <Trash2 size={15} />}
+          </button>
+        </span>
+      ),
+      meta: { hideSortMarker: true }
     }
   ];
 
@@ -137,6 +167,16 @@ export function LibraryPage() {
           emptyLabel="No imported packages"
         />
       </section>
+
+      {deleteError ? (
+        <section className="panel save-error-panel">
+          <Trash2 size={20} />
+          <div>
+            <h2>Package was not deleted</h2>
+            <p>{deleteError}</p>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

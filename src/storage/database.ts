@@ -18,6 +18,7 @@ export interface PerfexaStorage {
   listPackages(): Promise<ImportedPackage[]>;
   getPackage(id: string): Promise<ImportedPackage | undefined>;
   savePackage(pkg: ImportedPackage): Promise<void>;
+  deletePackage(id: string): Promise<void>;
   updatePackageNotes(id: string, notes: NotesDocument): Promise<void>;
 }
 
@@ -174,6 +175,11 @@ class BrowserStorage implements PerfexaStorage {
   async savePackage(pkg: ImportedPackage): Promise<void> {
     const next = this.readAll().filter((item) => item.id !== pkg.id);
     next.push(pkg);
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sortPackages(next)));
+  }
+
+  async deletePackage(id: string): Promise<void> {
+    const next = this.readAll().filter((item) => item.id !== id);
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sortPackages(next)));
   }
 
@@ -404,7 +410,7 @@ class SqliteStorage implements PerfexaStorage {
     }
   }
 
-  private async deletePackage(id: string): Promise<void> {
+  async deletePackage(id: string): Promise<void> {
     await this.db.execute("DELETE FROM packages WHERE id = ?", [id]);
     await this.db.execute("DELETE FROM scenarios WHERE package_id = ?", [id]);
     await this.db.execute("DELETE FROM configs WHERE package_id = ?", [id]);
