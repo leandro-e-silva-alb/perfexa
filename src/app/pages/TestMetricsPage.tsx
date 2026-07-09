@@ -227,7 +227,7 @@ function scopeOptionsForMetric(metric: MetricConfig, pkg: ImportedPackage | null
   return pkg ? buildTopologyGraph(pkg.topology).levels : [];
 }
 
-export function MetricsExplorerPage() {
+export function TestMetricsPage() {
   const { activePackage, setView } = useAppState();
   const [metricId, setMetricId] = useState("latency");
   const config = metricConfigs.find((item) => item.id === metricId) ?? metricConfigs[0];
@@ -727,8 +727,8 @@ export function MetricsExplorerPage() {
     return (
       <div className="empty-page">
         <h1>No package selected</h1>
-        <button className="button button-primary" type="button" onClick={() => setView("import")}>
-          Import package
+        <button className="button button-primary" type="button" onClick={() => setView("package-import")}>
+          Package Import
         </button>
       </div>
     );
@@ -738,17 +738,17 @@ export function MetricsExplorerPage() {
     <div className="page-stack page-stack-wide">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Metrics</p>
+          <p className="eyebrow">Test Metrics</p>
           <h1>{config.label}</h1>
           <span className="header-meta">{selectedTestLabel}</span>
         </div>
         <StatusPill tone={rows.length > 0 ? "ok" : "warn"}>{rows.length} facts</StatusPill>
       </header>
 
-      <section className="panel metrics-controls-panel">
-        <div className="metrics-workbar">
-          <label className="metrics-filter-field metrics-filter-test">
-            <span className="metrics-filter-label">
+      <section className="panel test-metrics-controls-panel">
+        <div className="test-metrics-workbar">
+          <label className="test-metrics-filter-field test-metrics-filter-test">
+            <span className="test-metrics-filter-label">
               <ListFilter size={15} aria-hidden="true" />
               Test
             </span>
@@ -761,12 +761,12 @@ export function MetricsExplorerPage() {
             </select>
           </label>
 
-          <div className="metrics-filter-cluster">
-            <span className="metrics-filter-label">
+          <div className="test-metrics-filter-cluster">
+            <span className="test-metrics-filter-label">
               <Activity size={15} aria-hidden="true" />
               Metric
             </span>
-            <div className="metrics-filter-group" role="group" aria-label="Metric">
+            <div className="test-metrics-filter-group" role="group" aria-label="Metric">
               {metricConfigs.map((metric) => {
                 const MetricIcon = metricIcons[metric.id] ?? Activity;
                 return (
@@ -784,8 +784,8 @@ export function MetricsExplorerPage() {
             </div>
           </div>
 
-          <label className="metrics-filter-field metrics-filter-compact">
-            <span className="metrics-filter-label">
+          <label className="test-metrics-filter-field test-metrics-filter-compact">
+            <span className="test-metrics-filter-label">
               <Sigma size={15} aria-hidden="true" />
               Stat
             </span>
@@ -798,8 +798,8 @@ export function MetricsExplorerPage() {
             </select>
           </label>
 
-          <label className="metrics-filter-field metrics-filter-compact">
-            <span className="metrics-filter-label">
+          <label className="test-metrics-filter-field test-metrics-filter-compact">
+            <span className="test-metrics-filter-label">
               <Layers size={15} aria-hidden="true" />
               {config.scopeType === "topology" ? "Topology level" : "Scope"}
             </span>
@@ -813,12 +813,12 @@ export function MetricsExplorerPage() {
           </label>
 
           {canUseStackedArea ? (
-            <div className="metrics-chart-mode" role="group" aria-label="Chart mode">
-              <span className="metrics-filter-label">
+            <div className="test-metrics-chart-mode" role="group" aria-label="Chart mode">
+              <span className="test-metrics-filter-label">
                 <SlidersHorizontal size={15} aria-hidden="true" />
                 Chart
               </span>
-              <div className="metrics-icon-toggle">
+              <div className="test-metrics-icon-toggle">
                 <button
                   type="button"
                   className={effectiveChartMode === "line" ? "selected" : ""}
@@ -866,3 +866,4 @@ export function MetricsExplorerPage() {
     </div>
   );
 }
+

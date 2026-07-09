@@ -19,7 +19,7 @@ import { useAppState } from "../AppState";
 
 type FilterSectionKey = "scenario" | "test" | "exagon" | "targetTps" | "saturation";
 type GroupBy = "none" | "scenario" | "test" | "exagon" | "targetTps" | "saturation";
-type OverviewColumnId =
+type RunExplorerColumnId =
   | "scenario"
   | "exagon"
   | "targetTps"
@@ -31,7 +31,7 @@ type OverviewColumnId =
   | "versions"
   | "started";
 
-interface OverviewFilters {
+interface RunExplorerFilters {
   scenarioIds: string[];
   testKeys: string[];
   exagonVers: string[];
@@ -52,13 +52,13 @@ interface FilterSection {
   selectedCount: number;
 }
 
-interface OverviewColumn {
-  id: OverviewColumnId;
+interface RunExplorerColumn {
+  id: RunExplorerColumnId;
   label: string;
   column: ColumnDef<RunSummary>;
 }
 
-const emptyFilters: OverviewFilters = {
+const emptyFilters: RunExplorerFilters = {
   scenarioIds: [],
   testKeys: [],
   exagonVers: [],
@@ -75,7 +75,7 @@ const groupOptions: Array<{ value: GroupBy; label: string }> = [
   { value: "saturation", label: "Saturation" }
 ];
 
-const allColumnIds: OverviewColumnId[] = [
+const allColumnIds: RunExplorerColumnId[] = [
   "scenario",
   "exagon",
   "targetTps",
@@ -88,7 +88,7 @@ const allColumnIds: OverviewColumnId[] = [
   "versions"
 ];
 
-const defaultColumnIds: OverviewColumnId[] = [
+const defaultColumnIds: RunExplorerColumnId[] = [
   "scenario",
   "exagon",
   "targetTps",
@@ -123,7 +123,7 @@ function optionsFromRows(
   return [...options.values()].sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
 }
 
-export function OverviewPage() {
+export function RunExplorerPage() {
   const { activePackage, setView } = useAppState();
   const [query, setQuery] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -134,10 +134,10 @@ export function OverviewPage() {
   const [columnSearch, setColumnSearch] = useState("");
   const [groupBy, setGroupBy] = useState<GroupBy>("none");
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
-  const [columnOrder, setColumnOrder] = useState<OverviewColumnId[]>(allColumnIds);
-  const [visibleColumnIds, setVisibleColumnIds] = useState<OverviewColumnId[]>(defaultColumnIds);
-  const [draggedColumnId, setDraggedColumnId] = useState<OverviewColumnId>();
-  const [filters, setFilters] = useState<OverviewFilters>(emptyFilters);
+  const [columnOrder, setColumnOrder] = useState<RunExplorerColumnId[]>(allColumnIds);
+  const [visibleColumnIds, setVisibleColumnIds] = useState<RunExplorerColumnId[]>(defaultColumnIds);
+  const [draggedColumnId, setDraggedColumnId] = useState<RunExplorerColumnId>();
+  const [filters, setFilters] = useState<RunExplorerFilters>(emptyFilters);
 
   const rows = useMemo(
     () => (activePackage ? buildRunSummaries(activePackage) : []),
@@ -159,8 +159,8 @@ export function OverviewPage() {
     return (
       <div className="empty-page">
         <h1>No package selected</h1>
-        <button className="button button-primary" type="button" onClick={() => setView("import")}>
-          Import package
+        <button className="button button-primary" type="button" onClick={() => setView("package-import")}>
+          Package Import
         </button>
       </div>
     );
@@ -247,7 +247,7 @@ export function OverviewPage() {
       if (sectionKey === "targetTps") return { ...current, targetTps: toggleValue(current.targetTps, value) };
       return {
         ...current,
-        saturation: current.saturation === value ? "all" : (value as OverviewFilters["saturation"])
+        saturation: current.saturation === value ? "all" : (value as RunExplorerFilters["saturation"])
       };
     });
   }
@@ -258,7 +258,7 @@ export function OverviewPage() {
     setOptionSearch("");
   }
 
-  function toggleColumn(columnId: OverviewColumnId): void {
+  function toggleColumn(columnId: RunExplorerColumnId): void {
     setVisibleColumnIds((current) => {
       if (current.includes(columnId)) {
         return current.length === 1 ? current : current.filter((id) => id !== columnId);
@@ -268,7 +268,7 @@ export function OverviewPage() {
     });
   }
 
-  function moveColumn(columnId: OverviewColumnId, targetColumnId: OverviewColumnId): void {
+  function moveColumn(columnId: RunExplorerColumnId, targetColumnId: RunExplorerColumnId): void {
     if (columnId === targetColumnId) return;
     setColumnOrder((current) => {
       const next = current.filter((id) => id !== columnId);
@@ -279,7 +279,7 @@ export function OverviewPage() {
     });
   }
 
-  function moveColumnByOffset(columnId: OverviewColumnId, offset: number): void {
+  function moveColumnByOffset(columnId: RunExplorerColumnId, offset: number): void {
     setColumnOrder((current) => {
       const currentIndex = current.indexOf(columnId);
       const targetIndex = currentIndex + offset;
@@ -388,9 +388,9 @@ export function OverviewPage() {
   ].filter(Boolean) as Array<{ key: string; label: string; onClear: () => void }>;
 
   const selectedGroupLabel = groupOptions.find((option) => option.value === groupBy)?.label ?? "No grouping";
-  const overviewInitialSorting: SortingState = [{ id: "scenario", desc: true }];
+  const runExplorerInitialSorting: SortingState = [{ id: "scenario", desc: true }];
 
-  const columnDefinitions: OverviewColumn[] = [
+  const columnDefinitions: RunExplorerColumn[] = [
     { id: "scenario", label: "Scenario", column: { id: "scenario", header: "Scenario", accessorKey: "scenario_name" } },
     { id: "exagon", label: "Exagon Version", column: { id: "exagon", header: "Exagon Version", accessorKey: "exagon_ver" } },
     { id: "targetTps", label: "Target TPS", column: { id: "targetTps", header: "Target TPS", accessorKey: "target_tps" } },
@@ -458,7 +458,7 @@ export function OverviewPage() {
   const columnDefinitionMap = new Map(columnDefinitions.map((column) => [column.id, column]));
   const orderedColumnDefinitions = columnOrder
     .map((id) => columnDefinitionMap.get(id))
-    .filter(Boolean) as OverviewColumn[];
+    .filter(Boolean) as RunExplorerColumn[];
   const columns = orderedColumnDefinitions
     .filter((column) => visibleColumnIds.includes(column.id))
     .map((column) => column.column);
@@ -473,7 +473,7 @@ export function OverviewPage() {
     <div className="page-stack">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Overview</p>
+          <p className="eyebrow">Run Explorer</p>
           <h1>{activePackage.name}</h1>
         </div>
         <span className="header-meta">Imported {formatDateTime(activePackage.importedAt)}</span>
@@ -498,9 +498,9 @@ export function OverviewPage() {
         </div>
       </section>
 
-      <section className="panel overview-results-panel">
-        <div className="overview-workbar">
-          <label className="overview-search" aria-label="Search overview runs">
+      <section className="panel run-explorer-results-panel">
+        <div className="run-explorer-workbar">
+          <label className="run-explorer-search" aria-label="Search runs">
             <Search size={16} aria-hidden="true" />
             <input
               value={query}
@@ -509,9 +509,9 @@ export function OverviewPage() {
             />
           </label>
 
-          <div className="overview-action-host">
+          <div className="run-explorer-action-host">
             <button
-              className={`button overview-toolbar-button ${filtersOpen ? "toolbar-selected" : ""}`}
+              className={`button run-explorer-toolbar-button ${filtersOpen ? "toolbar-selected" : ""}`}
               type="button"
               onClick={() => {
                 setFiltersOpen((open) => !open);
@@ -525,7 +525,7 @@ export function OverviewPage() {
             </button>
 
             {filtersOpen ? (
-              <div className="overview-popover filter-popover">
+              <div className="run-explorer-popover filter-popover">
                 <div className="filter-popover-header">
                   <strong>Basic filters</strong>
                   <button className="text-button" type="button" onClick={clearAllFilters} disabled={activeFilterCount === 0 && !query}>
@@ -581,9 +581,9 @@ export function OverviewPage() {
             ) : null}
           </div>
 
-          <div className="overview-action-host">
+          <div className="run-explorer-action-host">
             <button
-              className={`button overview-toolbar-button ${groupOpen || groupBy !== "none" ? "toolbar-selected" : ""}`}
+              className={`button run-explorer-toolbar-button ${groupOpen || groupBy !== "none" ? "toolbar-selected" : ""}`}
               type="button"
               onClick={() => {
                 setGroupOpen((open) => !open);
@@ -596,7 +596,7 @@ export function OverviewPage() {
             </button>
 
             {groupOpen ? (
-              <div className="overview-popover group-popover">
+              <div className="run-explorer-popover group-popover">
                 {groupOptions.map((option) => (
                   <button
                     key={option.value}
@@ -615,9 +615,9 @@ export function OverviewPage() {
             ) : null}
           </div>
 
-          <div className="overview-action-host">
+          <div className="run-explorer-action-host">
             <button
-              className={`button overview-toolbar-button ${columnsOpen ? "toolbar-selected" : ""}`}
+              className={`button run-explorer-toolbar-button ${columnsOpen ? "toolbar-selected" : ""}`}
               type="button"
               onClick={() => {
                 setColumnsOpen((open) => !open);
@@ -631,7 +631,7 @@ export function OverviewPage() {
             </button>
 
             {columnsOpen ? (
-              <div className="overview-popover columns-popover">
+              <div className="run-explorer-popover columns-popover">
                 <div className="filter-popover-header">
                   <strong>Columns</strong>
                   <button
@@ -724,7 +724,7 @@ export function OverviewPage() {
             ) : null}
           </div>
 
-          <span className="overview-result-count">
+          <span className="run-explorer-result-count">
             {filteredRows.length} of {rows.length} runs
           </span>
         </div>
@@ -755,19 +755,19 @@ export function OverviewPage() {
             columns={columns}
             emptyLabel="No runs match the current filters"
             showSearch={false}
-            initialSorting={overviewInitialSorting}
+            initialSorting={runExplorerInitialSorting}
           />
         ) : (
-          <div className="overview-groups">
+          <div className="run-explorer-groups">
             {groupedRows.length === 0 ? (
-              <div className="overview-group-empty">No runs match the current filters</div>
+              <div className="run-explorer-group-empty">No runs match the current filters</div>
             ) : (
               groupedRows.map((group) => {
                 const collapsed = collapsedGroups.includes(group.key);
                 return (
-                  <section className="overview-group" key={group.key}>
+                  <section className="run-explorer-group" key={group.key}>
                     <button
-                      className="overview-group-header"
+                      className="run-explorer-group-header"
                       type="button"
                       onClick={() => setCollapsedGroups((current) => toggleValue(current, group.key))}
                     >
@@ -782,7 +782,7 @@ export function OverviewPage() {
                         emptyLabel="No runs in this group"
                         compact
                         showSearch={false}
-                        initialSorting={overviewInitialSorting}
+                        initialSorting={runExplorerInitialSorting}
                       />
                     )}
                   </section>
@@ -795,3 +795,5 @@ export function OverviewPage() {
     </div>
   );
 }
+
+

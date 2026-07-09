@@ -2,7 +2,14 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { ImportedPackage, NotesDocument } from "../domain/types";
 import { createStorage, type PerfexaStorage } from "../storage/database";
 
-export type AppView = "import" | "library" | "overview" | "coverage" | "explorer" | "regression" | "comparisons";
+export type AppView =
+  | "package-import"
+  | "package-library"
+  | "scenario-board"
+  | "run-explorer"
+  | "test-metrics"
+  | "sizing-models"
+  | "test-compare";
 
 interface AppStateValue {
   storageReady: boolean;
@@ -28,7 +35,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [storage, setStorage] = useState<PerfexaStorage>();
   const [packages, setPackages] = useState<ImportedPackage[]>([]);
   const [activePackageId, setActivePackageId] = useState<string>();
-  const [view, setCurrentView] = useState<AppView>("import");
+  const [view, setCurrentView] = useState<AppView>("package-import");
   const [storageReady, setStorageReady] = useState(false);
   const [busyLabel, setBusyLabel] = useState("Starting");
   const [navigationBusy, setNavigationBusy] = useState(false);
@@ -45,7 +52,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         if (!mounted) return;
         setPackages(loaded);
         setActivePackageId((current) => current ?? loaded[0]?.id);
-        if (loaded.length > 0) setCurrentView("library");
+        if (loaded.length > 0) setCurrentView("package-library");
       })
       .finally(() => {
         if (mounted) {
@@ -90,7 +97,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setPackages(loaded);
       setActivePackageId(pkg.id);
       setComparisonTestKeysState([]);
-      setCurrentView("overview");
+      setCurrentView("run-explorer");
     } catch (error) {
       console.error("Unable to save imported package.", error);
       throw error;
@@ -149,7 +156,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setNavigationBusy(true);
     setActivePackageId(id);
     setComparisonTestKeysState([]);
-    setCurrentView("overview");
+    setCurrentView("run-explorer");
     window.setTimeout(() => setNavigationBusy(false), 220);
   }
 

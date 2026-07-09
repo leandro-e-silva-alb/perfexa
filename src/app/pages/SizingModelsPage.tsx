@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DataTable } from "../../components/DataTable";
 import { HelpModal } from "../../components/HelpModal";
 import { StatusPill } from "../../components/StatusPill";
-import { buildCpuRegressionRows, type CpuRegressionRow } from "../../domain/regression";
+import { buildCpuSizingModelRows, type CpuSizingModelRow } from "../../domain/sizingModels";
 import { useAppState } from "../AppState";
 
 function formatFixed(value: number | null, digits: number): string {
@@ -49,11 +49,11 @@ function nullableNumberSort<TData>(
   return leftValue - rightValue;
 }
 
-export function RegressionPage() {
+export function SizingModelsPage() {
   const { activePackage, setComparisonTestKeys, setView } = useAppState();
   const [selectedTestKeys, setSelectedTestKeys] = useState<string[]>([]);
   const [helpOpen, setHelpOpen] = useState(false);
-  const rows = useMemo(() => (activePackage ? buildCpuRegressionRows(activePackage) : []), [activePackage]);
+  const rows = useMemo(() => (activePackage ? buildCpuSizingModelRows(activePackage) : []), [activePackage]);
 
   useEffect(() => {
     setSelectedTestKeys([]);
@@ -63,8 +63,8 @@ export function RegressionPage() {
     return (
       <div className="empty-page">
         <h1>No package selected</h1>
-        <button className="button button-primary" type="button" onClick={() => setView("import")}>
-          Import package
+        <button className="button button-primary" type="button" onClick={() => setView("package-import")}>
+          Package Import
         </button>
       </div>
     );
@@ -88,16 +88,16 @@ export function RegressionPage() {
 
   function compareSelectedRows() {
     setComparisonTestKeys(selectedTestKeys);
-    setView("comparisons");
+    setView("test-compare");
   }
 
-  const columns: ColumnDef<CpuRegressionRow>[] = [
+  const columns: ColumnDef<CpuSizingModelRow>[] = [
     {
       id: "selection",
       header: () => (
-        <label className="regression-select-cell">
+        <label className="sizing-models-select-cell">
           <input
-            aria-label="Select all regression rows"
+            aria-label="Select all sizing model rows"
             checked={rows.length > 0 && selectedTestKeys.length === rows.length}
             type="checkbox"
             onChange={toggleAllRows}
@@ -105,7 +105,7 @@ export function RegressionPage() {
         </label>
       ),
       cell: ({ row }) => (
-        <label className="regression-select-cell">
+        <label className="sizing-models-select-cell">
           <input
             aria-label={`Select ${row.original.testKey}`}
             checked={selectedSet.has(row.original.testKey)}
@@ -172,7 +172,7 @@ export function RegressionPage() {
     <div className="page-stack page-stack-wide">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Regression</p>
+          <p className="eyebrow">Sizing Models</p>
           <h1>CPU over TPS</h1>
           <span className="header-meta">{activePackage.name}</span>
         </div>
@@ -182,8 +182,8 @@ export function RegressionPage() {
             type="button"
             onClick={() => setHelpOpen((open) => !open)}
             aria-expanded={helpOpen}
-            aria-controls="regression-help"
-            title="Show regression help"
+            aria-controls="sizing-models-help"
+            title="Show sizing model help"
           >
             <CircleHelp size={16} aria-hidden="true" />
             Help
@@ -226,22 +226,23 @@ export function RegressionPage() {
         <DataTable
           data={rows}
           columns={columns}
-          searchPlaceholder="Search regression rows"
-          emptyLabel="No regression rows"
+          searchPlaceholder="Search sizing model rows"
+          emptyLabel="No sizing model rows"
           initialSorting={[{ id: "scenario", desc: false }]}
         />
       </section>
       <HelpModal
         open={helpOpen}
-        title="Regression model help"
-        id="regression-help"
-        className="regression-help-modal"
-        contentClassName="regression-help-content"
-        closeLabel="Close regression help"
+        title="Sizing model help"
+        id="sizing-models-help"
+        className="sizing-models-help-modal"
+        contentClassName="sizing-models-help-content"
+        closeLabel="Close sizing model help"
         onClose={() => setHelpOpen(false)}
       >
-        <img src="/regression-cpu-model.png" alt="Decomposicao do modelo CPU por TPS" />
+        <img src="/sizing-models-cpu-model.png" alt="Decomposicao do modelo CPU por TPS" />
       </HelpModal>
     </div>
   );
 }
+

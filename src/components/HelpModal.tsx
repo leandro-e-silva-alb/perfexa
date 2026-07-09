@@ -14,7 +14,7 @@ interface HelpModalProps {
 }
 
 function portalTarget(): Element {
-  return document.querySelector("main.main-view") ?? document.querySelector(".main-view") ?? document.body;
+  return document.querySelector(".modal-layer") ?? document.querySelector(".main-view") ?? document.body;
 }
 
 export function HelpModal({

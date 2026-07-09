@@ -4,14 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { StatusPill } from "../../components/StatusPill";
 import {
-  buildCpuRegressionAnalyses,
+  buildCpuSizingModelAnalyses,
   predictCpu,
-  type CpuRegressionAnalysis,
-  type RegressionChartPoint
-} from "../../domain/regression";
+  type CpuSizingModelAnalysis,
+  type SizingModelChartPoint
+} from "../../domain/sizingModels";
 import { useAppState } from "../AppState";
 
-type FitReadyAnalysis = CpuRegressionAnalysis & {
+type FitReadyAnalysis = CpuSizingModelAnalysis & {
   idle: number;
   marginalCpu: number;
   transientOverhead: number;
@@ -52,11 +52,11 @@ function formatCompact(value: number | null | undefined, digits = 2): string {
   }).format(value);
 }
 
-function testLabel(row: CpuRegressionAnalysis): string {
+function testLabel(row: CpuSizingModelAnalysis): string {
   return `${row.scenario} / ${row.exagonVersion} / #${row.sequenceId}`;
 }
 
-function isFitReady(row: CpuRegressionAnalysis): row is FitReadyAnalysis {
+function isFitReady(row: CpuSizingModelAnalysis): row is FitReadyAnalysis {
   return (
     row.idle !== null &&
     row.marginalCpu !== null &&
@@ -67,7 +67,7 @@ function isFitReady(row: CpuRegressionAnalysis): row is FitReadyAnalysis {
   );
 }
 
-function predictedCpuCores(row: CpuRegressionAnalysis, effectiveTps: number): number | null {
+function predictedCpuCores(row: CpuSizingModelAnalysis, effectiveTps: number): number | null {
   if (!isFitReady(row)) {
     return null;
   }
@@ -83,7 +83,7 @@ function predictedCpuCores(row: CpuRegressionAnalysis, effectiveTps: number): nu
   );
 }
 
-function makeCurve(row: CpuRegressionAnalysis, maxTps: number): Array<[number, number]> {
+function makeCurve(row: CpuSizingModelAnalysis, maxTps: number): Array<[number, number]> {
   if (!isFitReady(row)) {
     return [];
   }
@@ -113,7 +113,7 @@ function parsePositiveInput(value: string): number | null {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function tpsForCpuCores(row: CpuRegressionAnalysis, cpuCores: number): number | null {
+function tpsForCpuCores(row: CpuSizingModelAnalysis, cpuCores: number): number | null {
   if (!isFitReady(row)) {
     return null;
   }
@@ -157,8 +157,8 @@ function tpsForCpuCores(row: CpuRegressionAnalysis, cpuCores: number): number | 
 }
 
 function pointData(
-  points: RegressionChartPoint[],
-  value: (point: RegressionChartPoint) => number | undefined
+  points: SizingModelChartPoint[],
+  value: (point: SizingModelChartPoint) => number | undefined
 ): Array<[number, number, string]> {
   return points
     .map((point): [number, number, string] | null => {
@@ -178,7 +178,7 @@ function ChartPanel({
   title: string;
 }) {
   return (
-    <section className="panel chart-panel compare-chart-panel">
+    <section className="panel chart-panel test-compare-chart-panel">
       <div className="panel-title">
         {icon}
         <h2>{title}</h2>
@@ -188,7 +188,7 @@ function ChartPanel({
   );
 }
 
-export function ComparisonsPage() {
+export function TestComparePage() {
   const { activePackage, comparisonTestKeys, setComparisonTestKeys, setView } = useAppState();
   const [draftTestKey, setDraftTestKey] = useState("");
   const [tpsInput, setTpsInput] = useState("1");
@@ -196,7 +196,7 @@ export function ComparisonsPage() {
   const initializedPackageId = useRef<string>();
 
   const analyses = useMemo(
-    () => (activePackage ? buildCpuRegressionAnalyses(activePackage) : []),
+    () => (activePackage ? buildCpuSizingModelAnalyses(activePackage) : []),
     [activePackage]
   );
   const analysisByKey = useMemo(
@@ -207,7 +207,7 @@ export function ComparisonsPage() {
     () =>
       comparisonTestKeys
         .map((key) => analysisByKey.get(key))
-        .filter((analysis): analysis is CpuRegressionAnalysis => Boolean(analysis)),
+        .filter((analysis): analysis is CpuSizingModelAnalysis => Boolean(analysis)),
     [analysisByKey, comparisonTestKeys]
   );
   const selectedKeySet = useMemo(
@@ -253,8 +253,8 @@ export function ComparisonsPage() {
     return (
       <div className="empty-page">
         <h1>No package selected</h1>
-        <button className="button button-primary" type="button" onClick={() => setView("import")}>
-          Import package
+        <button className="button button-primary" type="button" onClick={() => setView("package-import")}>
+          Package Import
         </button>
       </div>
     );
@@ -279,7 +279,7 @@ export function ComparisonsPage() {
     confine: true,
     axisPointer: { type: "cross" }
   };
-  const cpuRegressionOption = {
+  const cpuSizingModelOption = {
     animation: true,
     tooltip: sharedTooltip,
     legend: sharedLegend,
@@ -365,26 +365,25 @@ export function ComparisonsPage() {
     }))
   };
   const metricsRows = [
-    { label: "Scenario", value: (row: CpuRegressionAnalysis) => row.scenario },
-    { label: "Exagon version", value: (row: CpuRegressionAnalysis) => row.exagonVersion },
-    { label: "Config ID", value: (row: CpuRegressionAnalysis) => row.configId },
-    { label: "Base CPU (idle)", value: (row: CpuRegressionAnalysis) => formatFixed(row.idle, 6) },
-    { label: "Marginal CPU (L)", value: (row: CpuRegressionAnalysis) => formatFixed(row.marginalCpu, 9) },
-    { label: "Transient overhead (extra)", value: (row: CpuRegressionAnalysis) => formatFixed(row.transientOverhead, 6) },
-    { label: "Overhead half-saturation const. (k)", value: (row: CpuRegressionAnalysis) => formatFixed(row.halfSaturationK, 6) },
-    { label: "R2", value: (row: CpuRegressionAnalysis) => formatFixed(row.rSquared, 9) },
-    { label: "RMSE", value: (row: CpuRegressionAnalysis) => formatFixed(row.rmse, 4) },
-    { label: "Points Fitted/Total", value: (row: CpuRegressionAnalysis) => `${row.fittedPoints}/${row.totalPoints}` },
+    { label: "Scenario", value: (row: CpuSizingModelAnalysis) => row.scenario },
+    { label: "Exagon version", value: (row: CpuSizingModelAnalysis) => row.exagonVersion },
+    { label: "Base CPU (idle)", value: (row: CpuSizingModelAnalysis) => formatFixed(row.idle, 6) },
+    { label: "Incremental CPU (L)", value: (row: CpuSizingModelAnalysis) => formatFixed(row.marginalCpu, 9) },
+    { label: "Transient CPU overhead (extra)", value: (row: CpuSizingModelAnalysis) => formatFixed(row.transientOverhead, 6) },
+    { label: "Overhead half-saturation const. (k)", value: (row: CpuSizingModelAnalysis) => formatFixed(row.halfSaturationK, 6) },
+    { label: "R2", value: (row: CpuSizingModelAnalysis) => formatFixed(row.rSquared, 9) },
+    { label: "RMSE", value: (row: CpuSizingModelAnalysis) => formatFixed(row.rmse, 4) },
+    { label: "Points Fitted/Total", value: (row: CpuSizingModelAnalysis) => `${row.fittedPoints}/${row.totalPoints}` },
     {
       label: "Avg latency",
-      value: (row: CpuRegressionAnalysis) => {
+      value: (row: CpuSizingModelAnalysis) => {
         const value = average(row.points.map((point) => point.latencyAvg).filter((item): item is number => item !== undefined));
         return value === null ? "-" : `${formatFixed(value, 2)} ms`;
       }
     },
     {
       label: "Max throttling",
-      value: (row: CpuRegressionAnalysis) => {
+      value: (row: CpuSizingModelAnalysis) => {
         const value = maxValue(row.points.map((point) => point.maxThrottling).filter((item): item is number => item !== undefined));
         return value === null ? "-" : `${formatFixed(value, 2)}%`;
       }
@@ -411,8 +410,8 @@ export function ComparisonsPage() {
     <div className="page-stack page-stack-wide">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Compare</p>
-          <h1>Test regression comparison</h1>
+          <p className="eyebrow">Test Compare</p>
+          <h1>Test model comparison</h1>
           <span className="header-meta">{activePackage.name}</span>
         </div>
         <StatusPill tone={fitReadyCount > 0 ? "ok" : "warn"}>
@@ -420,10 +419,10 @@ export function ComparisonsPage() {
         </StatusPill>
       </header>
 
-      <section className="panel compare-selector-panel">
-        <div className="compare-selector-controls">
-          <label className="compare-test-picker">
-            <span className="metrics-filter-label">
+      <section className="panel test-compare-selector-panel">
+        <div className="test-compare-selector-controls">
+          <label className="test-compare-test-picker">
+            <span className="test-compare-filter-label">
               <GitCompare size={15} aria-hidden="true" />
               Test
             </span>
@@ -457,13 +456,13 @@ export function ComparisonsPage() {
           </button>
         </div>
 
-        <div className="compare-chip-row">
+        <div className="test-compare-chip-row">
           {selectedTests.length === 0 ? (
-            <span className="compare-empty-selection">No tests selected</span>
+            <span className="test-compare-empty-selection">No tests selected</span>
           ) : (
             selectedTests.map((test, index) => (
               <button
-                className="compare-test-chip"
+                className="test-compare-test-chip"
                 key={test.testKey}
                 type="button"
                 onClick={() => removeSelectedTest(test.testKey)}
@@ -478,11 +477,11 @@ export function ComparisonsPage() {
         </div>
       </section>
 
-      <ChartPanel icon={<Cpu size={17} aria-hidden="true" />} title="CPU vs TPS regression">
-        <EChartsReact option={cpuRegressionOption} notMerge lazyUpdate style={{ height: 380, width: "100%" }} />
+      <ChartPanel icon={<Cpu size={17} aria-hidden="true" />} title="CPU vs TPS model">
+        <EChartsReact option={cpuSizingModelOption} notMerge lazyUpdate style={{ height: 380, width: "100%" }} />
       </ChartPanel>
 
-      <div className="compare-two-column">
+      <div className="test-compare-two-column">
         <ChartPanel icon={<Gauge size={17} aria-hidden="true" />} title="Average latency">
           <EChartsReact option={latencyOption} notMerge lazyUpdate style={{ height: 320, width: "100%" }} />
         </ChartPanel>
@@ -491,19 +490,19 @@ export function ComparisonsPage() {
         </ChartPanel>
       </div>
 
-      <section className="panel compare-metrics-panel">
+      <section className="panel test-compare-model-metrics-panel">
         <div className="panel-title">
           <GitCompare size={17} aria-hidden="true" />
-          <h2>Metrics</h2>
+          <h2>Model metrics</h2>
         </div>
-        <div className="compare-metrics-wrap">
-          <table className="compare-metrics-table">
+        <div className="test-compare-model-metrics-wrap">
+          <table className="test-compare-model-metrics-table">
             <thead>
               <tr>
                 <th>Metric</th>
                 {selectedTests.map((test, index) => (
                   <th key={test.testKey}>
-                    <span className="compare-column-heading">
+                    <span className="test-compare-column-heading">
                       <i style={{ background: palette[index % palette.length] }} />
                       {testLabel(test)}
                     </span>
@@ -525,7 +524,7 @@ export function ComparisonsPage() {
         </div>
       </section>
 
-      <div className="compare-detail-grid">
+      <div className="test-compare-detail-grid">
         {selectedTests.map((test, index) => {
           const color = palette[index % palette.length];
           const actualData = test.points.map((point): [number, number, string] => [
@@ -579,7 +578,7 @@ export function ComparisonsPage() {
                 data: fittedData
               },
               {
-                name: "Regression",
+                name: "Model",
                 type: "line",
                 showSymbol: false,
                 smooth: true,
@@ -598,20 +597,20 @@ export function ComparisonsPage() {
         })}
       </div>
 
-      <section className="panel compare-calculator-panel">
+      <section className="panel test-compare-calculator-panel">
         <div className="panel-title">
           <Calculator size={17} aria-hidden="true" />
           <h2>Calculator</h2>
         </div>
-        <div className="compare-calculator-wrap">
-          <table className="compare-calculator-table">
+        <div className="test-compare-calculator-wrap">
+          <table className="test-compare-calculator-table">
             <thead>
               <tr>
                 <th>Mode</th>
                 <th>Input</th>
                 {selectedTests.map((test, index) => (
                   <th key={test.testKey}>
-                    <span className="compare-column-heading">
+                    <span className="test-compare-column-heading">
                       <i style={{ background: palette[index % palette.length] }} />
                       {testLabel(test)}
                     </span>
@@ -623,7 +622,7 @@ export function ComparisonsPage() {
               <tr>
                 <th>Sizing: CPU(TPS)</th>
                 <td>
-                  <label className="compare-inline-input">
+                  <label className="test-compare-inline-input">
                     <input
                       value={tpsInput}
                       onChange={(event) => setTpsInput(event.target.value)}
@@ -640,7 +639,7 @@ export function ComparisonsPage() {
               <tr>
                 <th>Throughput: TPS(CPU)</th>
                 <td>
-                  <label className="compare-inline-input">
+                  <label className="test-compare-inline-input">
                     <input
                       value={cpuInput}
                       onChange={(event) => setCpuInput(event.target.value)}
@@ -661,3 +660,4 @@ export function ComparisonsPage() {
     </div>
   );
 }
+

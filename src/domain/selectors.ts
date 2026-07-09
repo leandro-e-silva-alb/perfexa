@@ -37,7 +37,7 @@ export interface MetricPoint extends MeasurementRecord {
   source?: "observed" | "derived" | "rogue";
 }
 
-export interface CoverageMatrixCell {
+export interface ScenarioBoardMatrixCell {
   scenario_id: string;
   config_id: string;
   planned: boolean;
@@ -45,13 +45,13 @@ export interface CoverageMatrixCell {
   value: "-" | number;
 }
 
-export interface CoverageMatrixRow {
+export interface ScenarioBoardMatrixRow {
   scenario_id: string;
   scenario_name: string;
-  cells: CoverageMatrixCell[];
+  cells: ScenarioBoardMatrixCell[];
 }
 
-export interface CoverageMatrixConfig {
+export interface ScenarioBoardMatrixConfig {
   config_id: string;
   label: string;
   versionPatch: string;
@@ -59,15 +59,15 @@ export interface CoverageMatrixConfig {
   componentSummary?: string;
 }
 
-export interface CoverageMatrixConfigGroup {
+export interface ScenarioBoardMatrixConfigGroup {
   versionPatch: string;
   colSpan: number;
 }
 
-export interface CoverageMatrix {
-  configs: CoverageMatrixConfig[];
-  configGroups: CoverageMatrixConfigGroup[];
-  rows: CoverageMatrixRow[];
+export interface ScenarioBoardMatrix {
+  configs: ScenarioBoardMatrixConfig[];
+  configGroups: ScenarioBoardMatrixConfigGroup[];
+  rows: ScenarioBoardMatrixRow[];
   plannedPairs: number;
   coveredPairs: number;
   pendingPairs: number;
@@ -259,7 +259,7 @@ export function componentVersionSummary(pkg: ImportedPackage, componentsVer: str
     .join(", ");
 }
 
-export function buildCoverageMatrix(pkg: ImportedPackage): CoverageMatrix {
+export function buildScenarioBoardMatrix(pkg: ImportedPackage): ScenarioBoardMatrix {
   const scenarioEntries = new Map(pkg.scenarios.map((scenario) => [scenario.scenario_id, scenario]));
   const configEntries = new Map(pkg.configs.map((config) => [config.config_id, config]));
   const scenarioIds = new Set(pkg.scenarios.map((scenario) => scenario.scenario_id));
@@ -325,7 +325,7 @@ export function buildCoverageMatrix(pkg: ImportedPackage): CoverageMatrix {
       componentSummary
     };
   });
-  const configGroups = configs.reduce<CoverageMatrixConfigGroup[]>((groups, config) => {
+  const configGroups = configs.reduce<ScenarioBoardMatrixConfigGroup[]>((groups, config) => {
     const previousGroup = groups[groups.length - 1];
     if (previousGroup?.versionPatch === config.versionPatch) {
       previousGroup.colSpan += 1;

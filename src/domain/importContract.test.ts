@@ -136,7 +136,7 @@ describe("import contract", () => {
     expect(result.report.valid).toBe(true);
     expect(result.package?.runs).toHaveLength(1);
     expect(result.package?.scenarioHelp).toBeUndefined();
-    expect(result.report.features.find((feature) => feature.featureId === "overview")?.status).toBe(
+    expect(result.report.features.find((feature) => feature.featureId === "run-explorer")?.status).toBe(
       "available"
     );
   });

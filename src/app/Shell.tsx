@@ -7,7 +7,6 @@ import {
   Database,
   FolderInput,
   GitCompare,
-  LayoutDashboard,
   Loader2,
   Table2,
   type LucideIcon
@@ -23,13 +22,13 @@ const navItems: Array<{
   icon: LucideIcon;
   needsPackage?: boolean;
 }> = [
-  { id: "import", label: "Import", icon: FolderInput },
-  { id: "library", label: "Library", icon: Database },
-  { id: "coverage", label: "Coverage", icon: ClipboardCheck, needsPackage: true },
-  { id: "overview", label: "Overview", icon: Table2, needsPackage: true },
-  { id: "explorer", label: "Metrics", icon: BarChart3, needsPackage: true },
-  { id: "regression", label: "Regression", icon: Activity, needsPackage: true },
-  { id: "comparisons", label: "Compare", icon: GitCompare, needsPackage: true }
+  { id: "package-import", label: "Package Import", icon: FolderInput },
+  { id: "package-library", label: "Package Library", icon: Database },
+  { id: "scenario-board", label: "Scenario Board", icon: ClipboardCheck, needsPackage: true },
+  { id: "run-explorer", label: "Run Explorer", icon: Table2, needsPackage: true },
+  { id: "test-metrics", label: "Test Metrics", icon: BarChart3, needsPackage: true },
+  { id: "sizing-models", label: "Sizing Models", icon: Activity, needsPackage: true },
+  { id: "test-compare", label: "Test Compare", icon: GitCompare, needsPackage: true }
 ];
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -40,7 +39,7 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className={collapsed ? "app-shell sidebar-collapsed" : "app-shell"}>
       <aside className="sidebar">
         <div className="brand">
-          <LayoutDashboard size={22} aria-hidden="true" />
+          <img className="brand-logo" src="/perfexa-logo-dark.svg" alt="" aria-hidden="true" />
           <div>
             <strong>Perfexa</strong>
             <span>Performance runs</span>
@@ -80,17 +79,20 @@ export function Shell({ children }: { children: ReactNode }) {
           <span className="sidebar-version">Perfexa v{__APP_VERSION__}</span>
         </div>
       </aside>
-      <main className="main-view">
-        {isBusy ? (
-          <div className="global-loading" role="status" aria-live="polite" title={busyLabel}>
-            <Loader2 size={20} />
-            <span className="sr-only">{busyLabel}</span>
+      <section className="content-column">
+        <main className="main-view">
+          {isBusy ? (
+            <div className="global-loading" role="status" aria-live="polite" title={busyLabel}>
+              <Loader2 size={20} />
+              <span className="sr-only">{busyLabel}</span>
+            </div>
+          ) : null}
+          <div className={isBusy ? "page-transition page-transition-busy" : "page-transition"}>
+            {children}
           </div>
-        ) : null}
-        <div className={isBusy ? "page-transition page-transition-busy" : "page-transition"}>
-          {children}
-        </div>
-      </main>
+        </main>
+        <div className="modal-layer" />
+      </section>
     </div>
   );
 }

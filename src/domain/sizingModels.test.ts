@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { validateImportSource } from "./importContract";
-import { buildCpuRegressionAnalyses, buildCpuRegressionRows } from "./regression";
+import { buildCpuSizingModelAnalyses, buildCpuSizingModelRows } from "./sizingModels";
 import type { ImportFileSource } from "./types";
 
 function fixtureSource(rootName: string): ImportFileSource {
@@ -21,10 +21,10 @@ function fixtureSource(rootName: string): ImportFileSource {
   };
 }
 
-describe("CPU regression", () => {
-  it("builds one hyperbolic regression row per executed run identity", async () => {
+describe("CPU sizing model", () => {
+  it("builds one hyperbolic sizing model row per executed run identity", async () => {
     const result = await validateImportSource(fixtureSource("real-perf-import"));
-    const rows = buildCpuRegressionRows(result.package!);
+    const rows = buildCpuSizingModelRows(result.package!);
     const runTestKeys = new Set(
       result.package!.runs.map((run) => `${run.scenario_id} / ${run.config_id} / #${run.sequence_id}`)
     );
@@ -34,7 +34,7 @@ describe("CPU regression", () => {
     expect(rows.every((row) => row.sequenceId === 0)).toBe(true);
   });
 
-  it("does not create regression rows for planned tests without runs", async () => {
+  it("does not create sizing model rows for planned tests without runs", async () => {
     const result = await validateImportSource(fixtureSource("perf-import"));
     const pkg = {
       ...result.package!,
@@ -48,7 +48,7 @@ describe("CPU regression", () => {
       ]
     };
 
-    const rows = buildCpuRegressionRows(pkg);
+    const rows = buildCpuSizingModelRows(pkg);
 
     expect(rows.some((row) => row.configId === "cfg-planned-only")).toBe(false);
     expect(rows.map((row) => row.testKey).sort()).toEqual(
@@ -58,7 +58,7 @@ describe("CPU regression", () => {
 
   it("matches the known parallel command hyperbolic CPU fit", async () => {
     const result = await validateImportSource(fixtureSource("real-perf-import"));
-    const rows = buildCpuRegressionRows(result.package!);
+    const rows = buildCpuSizingModelRows(result.package!);
     const parallelCommand = rows.find((row) => row.scenarioId === "parallel_command");
 
     expect(parallelCommand).toBeDefined();
@@ -74,7 +74,7 @@ describe("CPU regression", () => {
 
   it("keeps saturated points in the total while excluding them from the fit", async () => {
     const result = await validateImportSource(fixtureSource("real-perf-import"));
-    const rows = buildCpuRegressionRows(result.package!);
+    const rows = buildCpuSizingModelRows(result.package!);
     const cacheNone = rows.find((row) => row.scenarioId === "rwro_none");
 
     expect(cacheNone).toBeDefined();
@@ -84,7 +84,7 @@ describe("CPU regression", () => {
 
   it("exposes chart points with fit membership and comparison metrics", async () => {
     const result = await validateImportSource(fixtureSource("real-perf-import"));
-    const rows = buildCpuRegressionAnalyses(result.package!);
+    const rows = buildCpuSizingModelAnalyses(result.package!);
     const cacheNone = rows.find((row) => row.scenarioId === "rwro_none");
 
     expect(cacheNone).toBeDefined();

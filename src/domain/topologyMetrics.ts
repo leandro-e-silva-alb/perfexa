@@ -289,9 +289,9 @@ export function validateMetricsDocument(metrics: MetricsDocument): string[] {
   const metricIds = new Set(Object.keys(metrics.metrics));
 
   if (!metrics.metrics.cpu) {
-    errors.push('metrics.yaml must define required metric "cpu" for regression.');
+    errors.push('metrics.yaml must define required metric "cpu" for sizing models.');
   } else if (metrics.metrics.cpu.aggregation !== "sum") {
-    errors.push('metrics.yaml metric "cpu" must use aggregation "sum" for regression CPU totals.');
+    errors.push('metrics.yaml metric "cpu" must use aggregation "sum" for sizing model CPU totals.');
   }
 
   for (const [metricId, definition] of Object.entries(metrics.metrics)) {

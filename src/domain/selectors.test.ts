@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCoverageMatrix, exagonPatchVersion, measurementsForScope, testKeyFor } from "./selectors";
+import { buildScenarioBoardMatrix, exagonPatchVersion, measurementsForScope, testKeyFor } from "./selectors";
 import type { ImportedPackage, MeasurementRecord } from "./types";
 
 function measurement(
@@ -98,7 +98,7 @@ describe("metric selectors", () => {
   });
 });
 
-describe("coverage selectors", () => {
+describe("scenario board selectors", () => {
   it("builds a scenario/config execution matrix from planned tests and runs", () => {
     const data: ImportedPackage = {
       ...pkg([]),
@@ -147,7 +147,7 @@ describe("coverage selectors", () => {
       ]
     };
 
-    const matrix = buildCoverageMatrix(data);
+    const matrix = buildScenarioBoardMatrix(data);
     const checkout = matrix.rows.find((row) => row.scenario_id === "checkout")!;
     const browse = matrix.rows.find((row) => row.scenario_id === "browse")!;
 
@@ -202,7 +202,7 @@ describe("coverage selectors", () => {
       runs: []
     };
 
-    const matrix = buildCoverageMatrix(data);
+    const matrix = buildScenarioBoardMatrix(data);
 
     expect(exagonPatchVersion("6.3.1")).toBe("6.3.1");
     expect(exagonPatchVersion("6.3.2-SNAPSHOT")).toBe("6.3.2");

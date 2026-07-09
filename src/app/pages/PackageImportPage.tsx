@@ -190,7 +190,7 @@ function loadGitHubConfig(): GitHubImportConfig {
   }
 }
 
-export function ImportPage() {
+export function PackageImportPage() {
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
   const { saveImportedPackage, storageReady } = useAppState();
@@ -370,7 +370,7 @@ export function ImportPage() {
     <div className="page-stack">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Import</p>
+          <p className="eyebrow">Package Import</p>
           <h1>Validate and import a performance package</h1>
         </div>
         <div className="header-actions">
@@ -601,7 +601,7 @@ export function ImportPage() {
                 )
               },
               {
-                header: "Coverage",
+                header: "Availability",
                 cell: ({ row }) => `${row.original.presentCount}/${row.original.requiredCount}`
               },
               {
@@ -618,3 +618,4 @@ export function ImportPage() {
     </div>
   );
 }
+

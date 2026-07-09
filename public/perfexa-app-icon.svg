@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Perfexa app icon">
+  <defs>
+    <linearGradient id="outerFill" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#ffffff"/>
+      <stop offset=".48" stop-color="#dce5e7"/>
+      <stop offset="1" stop-color="#aebdc0"/>
+    </linearGradient>
+    <linearGradient id="innerBlue" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#3de5d3"/>
+      <stop offset=".52" stop-color="#18a39d"/>
+      <stop offset="1" stop-color="#0c6864"/>
+    </linearGradient>
+    <filter id="outerShadow" x="-25%" y="-25%" width="150%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="13" flood-color="#000000" flood-opacity=".45"/>
+    </filter>
+    <filter id="innerShadow" x="-25%" y="-25%" width="150%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#000000" flood-opacity=".3"/>
+    </filter>
+  </defs>
+  <g transform="translate(43 12) scale(1.55) translate(-230 -125)">
+    <g transform="translate(0 552) scale(.1 -.1)">
+      <path
+        filter="url(#outerShadow)"
+        fill="url(#outerFill)"
+        d="M3605 4244 c-84 -22 -159 -59 -440 -221 -176 -102 -396 -228 -489
+-282 -188 -106 -266 -172 -310 -258 -55 -110 -56 -118 -56 -743 0 -634 0 -636
+62 -752 43 -81 109 -137 273 -233 l140 -82 5 776 c4 583 8 781 17 797 7 12
+197 128 425 260 324 187 421 238 448 238 27 0 124 -51 449 -239 364 -210 415
+-243 427 -272 11 -26 14 -126 14 -500 0 -439 -1 -470 -19 -498 -14 -22 -114
+-85 -389 -244 -205 -117 -376 -219 -382 -226 -7 -8 -9 -107 -8 -282 l3 -270
+405 233 c223 129 465 269 539 312 158 90 226 149 269 230 62 116 62 118 62
+752 0 625 -1 633 -56 743 -44 86 -122 152 -310 258 -93 54 -311 179 -484 279
+-173 100 -340 191 -370 202 -54 19 -186 32 -225 22z"
+      />
+      <g fill="url(#innerBlue)" filter="url(#innerShadow)">
+        <path d="M3357 3375 c-291 -169 -298 -174 -275 -188 84 -55 586 -337 598 -337
+12 0 514 282 598 337 23 14 16 19 -278 189 -166 96 -311 174 -323 173 -12 0
+-156 -79 -320 -174z"/>
+        <path d="M2970 2313 c0 -401 4 -734 9 -742 5 -7 143 -91 307 -186 l299 -172 3
+731 2 730 -22 22 c-22 20 -578 344 -592 344 -3 0 -6 -327 -6 -727z"/>
+        <path d="M4090 2875 c-156 -91 -292 -173 -302 -183 -17 -17 -18 -42 -16 -369
+l3 -351 299 173 c164 95 302 179 307 186 11 17 12 709 2 709 -5 0 -136 -75
+-293 -165z"/>
+      </g>
+    </g>
+  </g>
+</svg>

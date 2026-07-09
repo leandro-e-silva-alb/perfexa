@@ -1,22 +1,22 @@
 import { AppStateProvider, useAppState } from "./AppState";
 import { Shell } from "./Shell";
-import { ComparisonsPage } from "./pages/ComparisonsPage";
-import { CoveragePage } from "./pages/CoveragePage";
-import { ImportPage } from "./pages/ImportPage";
-import { LibraryPage } from "./pages/LibraryPage";
-import { MetricsExplorerPage } from "./pages/MetricsExplorerPage";
-import { OverviewPage } from "./pages/OverviewPage";
-import { RegressionPage } from "./pages/RegressionPage";
+import { PackageImportPage } from "./pages/PackageImportPage";
+import { PackageLibraryPage } from "./pages/PackageLibraryPage";
+import { RunExplorerPage } from "./pages/RunExplorerPage";
+import { ScenarioBoardPage } from "./pages/ScenarioBoardPage";
+import { SizingModelsPage } from "./pages/SizingModelsPage";
+import { TestComparePage } from "./pages/TestComparePage";
+import { TestMetricsPage } from "./pages/TestMetricsPage";
 
 function ActivePage() {
   const { view } = useAppState();
-  if (view === "library") return <LibraryPage />;
-  if (view === "overview") return <OverviewPage />;
-  if (view === "coverage") return <CoveragePage />;
-  if (view === "explorer") return <MetricsExplorerPage />;
-  if (view === "regression") return <RegressionPage />;
-  if (view === "comparisons") return <ComparisonsPage />;
-  return <ImportPage />;
+  if (view === "package-library") return <PackageLibraryPage />;
+  if (view === "run-explorer") return <RunExplorerPage />;
+  if (view === "scenario-board") return <ScenarioBoardPage />;
+  if (view === "test-metrics") return <TestMetricsPage />;
+  if (view === "sizing-models") return <SizingModelsPage />;
+  if (view === "test-compare") return <TestComparePage />;
+  return <PackageImportPage />;
 }
 
 export function App() {

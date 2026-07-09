@@ -3,23 +3,23 @@ import { useMemo, useState } from "react";
 import { HelpModal } from "../../components/HelpModal";
 import { StatusPill } from "../../components/StatusPill";
 import {
-  buildCoverageMatrix,
+  buildScenarioBoardMatrix,
   formatDateTime,
   formatNumber,
-  type CoverageMatrixCell,
-  type CoverageMatrixConfig
+  type ScenarioBoardMatrixCell,
+  type ScenarioBoardMatrixConfig
 } from "../../domain/selectors";
 import type { ScenarioHelpEntry } from "../../domain/types";
 import { useAppState } from "../AppState";
 
 type ScenarioSortDirection = "asc" | "desc";
 
-function cellTone(cell: CoverageMatrixCell): string {
-  if (!cell.planned) return "coverage-cell-unplanned";
-  return cell.runCount > 0 ? "coverage-cell-covered" : "coverage-cell-pending";
+function cellTone(cell: ScenarioBoardMatrixCell): string {
+  if (!cell.planned) return "scenario-board-cell-unplanned";
+  return cell.runCount > 0 ? "scenario-board-cell-covered" : "scenario-board-cell-pending";
 }
 
-function cellTitle(cell: CoverageMatrixCell, config: CoverageMatrixConfig | undefined): string {
+function cellTitle(cell: ScenarioBoardMatrixCell, config: ScenarioBoardMatrixConfig | undefined): string {
   const configLabel = config?.label ?? cell.config_id;
   if (!cell.planned) return `${cell.scenario_id} / ${configLabel}: not planned`;
   if (cell.runCount === 0) return `${cell.scenario_id} / ${configLabel}: planned, not executed`;
@@ -67,12 +67,12 @@ function ScenarioHelpContent({ help }: { help: ScenarioHelpEntry }) {
   );
 }
 
-export function CoveragePage() {
+export function ScenarioBoardPage() {
   const { activePackage, setView } = useAppState();
   const [selectedHelpScenarioId, setSelectedHelpScenarioId] = useState<string | undefined>();
   const [scenarioSortDirection, setScenarioSortDirection] = useState<ScenarioSortDirection>("asc");
   const matrix = useMemo(
-    () => (activePackage ? buildCoverageMatrix(activePackage) : undefined),
+    () => (activePackage ? buildScenarioBoardMatrix(activePackage) : undefined),
     [activePackage]
   );
   const sortedRows = useMemo(() => {
@@ -90,16 +90,16 @@ export function CoveragePage() {
     return (
       <div className="empty-page">
         <h1>No package selected</h1>
-        <button className="button button-primary" type="button" onClick={() => setView("import")}>
-          Import package
+        <button className="button button-primary" type="button" onClick={() => setView("package-import")}>
+          Package Import
         </button>
       </div>
     );
   }
 
-  const coveragePercent =
+  const scenarioBoardPercent =
     matrix.plannedPairs === 0 ? 0 : Math.round((matrix.coveredPairs / matrix.plannedPairs) * 100);
-  const coverageTone = matrix.pendingPairs === 0 && matrix.plannedPairs > 0 ? "ok" : "warn";
+  const scenarioBoardTone = matrix.pendingPairs === 0 && matrix.plannedPairs > 0 ? "ok" : "warn";
   const helpByScenario = activePackage.scenarioHelp?.scenarios ?? {};
   const selectedScenarioHelp = selectedHelpScenarioId ? helpByScenario[selectedHelpScenarioId] : undefined;
   const ScenarioSortIcon = scenarioSortDirection === "asc" ? ArrowDownAZ : ArrowDownZA;
@@ -109,43 +109,43 @@ export function CoveragePage() {
     <div className="page-stack page-stack-wide">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Coverage</p>
+          <p className="eyebrow">Scenario Board</p>
           <h1>{activePackage.name}</h1>
           <span className="header-meta">Imported {formatDateTime(activePackage.importedAt)}</span>
         </div>
-        <StatusPill tone={coverageTone}>{coveragePercent}% covered</StatusPill>
+        <StatusPill tone={scenarioBoardTone}>{scenarioBoardPercent}% complete</StatusPill>
       </header>
 
-      <section className="panel coverage-panel">
-        <div className="panel-title coverage-title">
+      <section className="panel scenario-board-panel">
+        <div className="panel-title scenario-board-title">
           <h2>Scenario / config matrix</h2>
-          <div className="coverage-legend" aria-label="Coverage legend">
+          <div className="scenario-board-legend" aria-label="Scenario board legend">
             <span>
-              <i className="coverage-token coverage-token-covered">N</i>
+              <i className="scenario-board-token scenario-board-token-covered">N</i>
               Executed
             </span>
             <span>
-              <i className="coverage-token coverage-token-pending">0</i>
+              <i className="scenario-board-token scenario-board-token-pending">0</i>
               Pending
             </span>
             <span>
-              <i className="coverage-token coverage-token-unplanned">-</i>
+              <i className="scenario-board-token scenario-board-token-unplanned">-</i>
               Not planned
             </span>
           </div>
         </div>
 
-        <div className="coverage-table-wrap">
-          <table className="coverage-table">
+        <div className="scenario-board-table-wrap">
+          <table className="scenario-board-table">
             <thead>
               <tr>
                 <th
-                  className="coverage-scenario-head"
+                  className="scenario-board-scenario-head"
                   rowSpan={2}
                   aria-sort={scenarioSortDirection === "asc" ? "ascending" : "descending"}
                 >
                   <button
-                    className="coverage-scenario-sort"
+                    className="scenario-board-scenario-sort"
                     type="button"
                     title={`Sort scenarios ${nextScenarioSortDirection}`}
                     aria-label={`Sort scenarios ${nextScenarioSortDirection}`}
@@ -154,7 +154,7 @@ export function CoveragePage() {
                     }
                   >
                     <span>Scenario</span>
-                    <span className="coverage-scenario-sort-mark">
+                    <span className="scenario-board-scenario-sort-mark">
                       <ScenarioSortIcon size={15} aria-hidden="true" />
                       {scenarioSortDirection === "asc" ? "A-Z" : "Z-A"}
                     </span>
@@ -162,7 +162,7 @@ export function CoveragePage() {
                 </th>
                 {matrix.configGroups.map((group) => (
                   <th
-                    className="coverage-config-patch-head"
+                    className="scenario-board-config-patch-head"
                     key={group.versionPatch}
                     colSpan={group.colSpan}
                     scope="colgroup"
@@ -174,14 +174,14 @@ export function CoveragePage() {
               <tr>
                 {matrix.configs.map((config) => (
                   <th
-                    className="coverage-config-version-head"
+                    className="scenario-board-config-version-head"
                     key={config.config_id}
                     scope="col"
                     title={config.componentSummary}
                   >
-                    <span className="coverage-config-heading">
+                    <span className="scenario-board-config-heading">
                       <strong>{config.label}</strong>
-                      {config.rcSummary ? <small className="coverage-rc-tag">{config.rcSummary}</small> : null}
+                      {config.rcSummary ? <small className="scenario-board-rc-tag">{config.rcSummary}</small> : null}
                     </span>
                   </th>
                 ))}
@@ -201,13 +201,13 @@ export function CoveragePage() {
                   return (
                     <tr key={row.scenario_id}>
                       <th scope="row">
-                        <span className="coverage-scenario-row-heading">
-                          <span className="coverage-scenario-heading">
+                        <span className="scenario-board-scenario-row-heading">
+                          <span className="scenario-board-scenario-heading">
                             <strong>{row.scenario_name}</strong>
                           </span>
                           {scenarioHelp ? (
                             <button
-                              className="icon-button coverage-scenario-help-button"
+                              className="icon-button scenario-board-scenario-help-button"
                               type="button"
                               title={`Show help for ${row.scenario_name}`}
                               aria-label={`Show help for ${row.scenario_name}`}
@@ -227,7 +227,7 @@ export function CoveragePage() {
                             className={cellTone(cell)}
                             title={cellTitle(cell, config)}
                           >
-                            <span className="coverage-cell-value">
+                            <span className="scenario-board-cell-value">
                               {cell.value === "-" ? "-" : formatNumber(cell.value, 0)}
                             </span>
                           </td>
@@ -255,3 +255,4 @@ export function CoveragePage() {
     </div>
   );
 }
+

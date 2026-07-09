@@ -8,8 +8,8 @@ import type {
 
 export const featureRegistry: AppFeature[] = [
   {
-    id: "overview",
-    label: "Overview table",
+    id: "run-explorer",
+    label: "Run Explorer",
     description: "Operational run summary with TPS, latency, errors, versions, and saturation.",
     requirements: [
       { metric_id: "throughput", stat: "effective", instance_id: "", label: "Effective TPS" },
@@ -38,9 +38,9 @@ export const featureRegistry: AppFeature[] = [
     ]
   },
   {
-    id: "regression",
-    label: "Regression table",
-    description: "CPU-over-TPS regression by test.",
+    id: "sizing-models",
+    label: "Sizing Models",
+    description: "CPU-over-TPS sizing models by test.",
     requirements: [
       { metric_id: "throughput", stat: "effective", instance_id: "", label: "Effective TPS" },
       { metric_id: "cpu", stat: "avg", label: "CPU avg by topology node" }

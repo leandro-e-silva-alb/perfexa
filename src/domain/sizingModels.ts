@@ -3,12 +3,12 @@ import { scenarioName, testKeyFor } from "./selectors";
 import { buildTopologyGraph, resolveTopologyMeasurements } from "./topologyMetrics";
 import type { ImportedPackage, MeasurementRecord, RunRecord } from "./types";
 
-export interface RegressionPoint {
+export interface SizingModelPoint {
   effectiveTps: number;
   cpuMcpu: number;
 }
 
-export interface RegressionChartPoint extends RegressionPoint {
+export interface SizingModelChartPoint extends SizingModelPoint {
   runId: string;
   targetTps: number;
   fitted: boolean;
@@ -26,7 +26,7 @@ export interface HyperbolicFit {
   rmse: number;
 }
 
-export interface CpuRegressionRow {
+export interface CpuSizingModelRow {
   testKey: string;
   scenarioId: string;
   scenario: string;
@@ -43,19 +43,19 @@ export interface CpuRegressionRow {
   totalPoints: number;
 }
 
-export interface CpuRegressionAnalysis extends CpuRegressionRow {
-  points: RegressionChartPoint[];
+export interface CpuSizingModelAnalysis extends CpuSizingModelRow {
+  points: SizingModelChartPoint[];
 }
 
-interface RegressionGroup {
+interface SizingModelGroup {
   testKey: string;
   scenarioId: string;
   scenario: string;
   configId: string;
   sequenceId: number;
   exagonVersion: string;
-  fittedPoints: RegressionPoint[];
-  points: RegressionChartPoint[];
+  fittedPoints: SizingModelPoint[];
+  points: SizingModelChartPoint[];
   totalPoints: number;
 }
 
@@ -155,7 +155,7 @@ function buildMaxThrottlingByRun(pkg: ImportedPackage): Map<string, number> {
   return result;
 }
 
-function createGroup(pkg: ImportedPackage, test: RunRecord): RegressionGroup {
+function createGroup(pkg: ImportedPackage, test: RunRecord): SizingModelGroup {
   const config = pkg.configs.find((entry) => entry.config_id === test.config_id);
 
   return {
@@ -171,8 +171,8 @@ function createGroup(pkg: ImportedPackage, test: RunRecord): RegressionGroup {
   };
 }
 
-export function buildCpuRegressionAnalyses(pkg: ImportedPackage): CpuRegressionAnalysis[] {
-  const groups = new Map<string, RegressionGroup>();
+export function buildCpuSizingModelAnalyses(pkg: ImportedPackage): CpuSizingModelAnalysis[] {
+  const groups = new Map<string, SizingModelGroup>();
   const effectiveTpsByRun = buildEffectiveTpsByRun(pkg.measurements);
   const cpuByRun = buildCpuByRun(pkg);
   const latencyAvgByRun = buildRunLevelMeasurementByRun(pkg.measurements, "latency", "avg");
@@ -192,7 +192,7 @@ export function buildCpuRegressionAnalyses(pkg: ImportedPackage): CpuRegressionA
 
     group.totalPoints += 1;
     const saturated = Boolean(saturationByRun[run.run_id]?.saturated);
-    const point: RegressionChartPoint = {
+    const point: SizingModelChartPoint = {
       runId: run.run_id,
       targetTps: run.target_tps,
       effectiveTps,
@@ -241,11 +241,11 @@ export function buildCpuRegressionAnalyses(pkg: ImportedPackage): CpuRegressionA
     );
 }
 
-export function buildCpuRegressionRows(pkg: ImportedPackage): CpuRegressionRow[] {
-  return buildCpuRegressionAnalyses(pkg).map(({ points, ...row }) => row);
+export function buildCpuSizingModelRows(pkg: ImportedPackage): CpuSizingModelRow[] {
+  return buildCpuSizingModelAnalyses(pkg).map(({ points, ...row }) => row);
 }
 
-export function calculateHyperbolicFit(points: RegressionPoint[]): HyperbolicFit | null {
+export function calculateHyperbolicFit(points: SizingModelPoint[]): HyperbolicFit | null {
   if (points.length < 3 || !hasTpsVariation(points)) {
     return null;
   }
@@ -299,12 +299,12 @@ export function calculateHyperbolicFit(points: RegressionPoint[]): HyperbolicFit
   };
 }
 
-function hasTpsVariation(points: RegressionPoint[]): boolean {
+function hasTpsVariation(points: SizingModelPoint[]): boolean {
   const first = points[0].effectiveTps;
   return points.some((point) => Math.abs(point.effectiveTps - first) > 1e-9);
 }
 
-function calculateKBounds(points: RegressionPoint[]): { minK: number; maxK: number } | null {
+function calculateKBounds(points: SizingModelPoint[]): { minK: number; maxK: number } | null {
   const positiveTps = points.map((point) => point.effectiveTps).filter((value) => value > 0);
   if (positiveTps.length === 0) {
     return null;
@@ -318,7 +318,7 @@ function calculateKBounds(points: RegressionPoint[]): { minK: number; maxK: numb
 }
 
 function refineLogK(
-  points: RegressionPoint[],
+  points: SizingModelPoint[],
   left: number,
   right: number,
   initialBest: FitEvaluation
@@ -361,7 +361,7 @@ function refineLogK(
   return best;
 }
 
-function evaluateForK(points: RegressionPoint[], k: number): FitEvaluation | null {
+function evaluateForK(points: SizingModelPoint[], k: number): FitEvaluation | null {
   const coefficients = solveLinearLeastSquaresForK(points, k);
   if (!coefficients) {
     return null;
@@ -387,7 +387,7 @@ function evaluateForK(points: RegressionPoint[], k: number): FitEvaluation | nul
   };
 }
 
-function solveLinearLeastSquaresForK(points: RegressionPoint[], k: number): number[] | null {
+function solveLinearLeastSquaresForK(points: SizingModelPoint[], k: number): number[] | null {
   const normal = [
     [0, 0, 0],
     [0, 0, 0],

@@ -84,12 +84,12 @@ describe("topology metric resolver", () => {
     expect(graph.nodes.get("south_america")?.color).toBe("#ff668e");
   });
 
-  it("validates metric definitions required for regression", () => {
+  it("validates metric definitions required for sizing models", () => {
     expect(validateMetricsDocument({ metrics: { cpu: { aggregation: "max" } } })).toContain(
-      'metrics.yaml metric "cpu" must use aggregation "sum" for regression CPU totals.'
+      'metrics.yaml metric "cpu" must use aggregation "sum" for sizing model CPU totals.'
     );
     expect(validateMetricsDocument({ metrics: { matches: { aggregation: "sum" } } })).toContain(
-      'metrics.yaml must define required metric "cpu" for regression.'
+      'metrics.yaml must define required metric "cpu" for sizing models.'
     );
   });
 

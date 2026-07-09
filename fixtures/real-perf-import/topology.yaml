@@ -8,7 +8,7 @@ layers:
 nodes:
   - key: usrv-a
     layer: microservice
-    color: "#ff0043"
+    color: "#FF4E1B"
     children:
       - orch-a
       - rf-a
@@ -16,7 +16,7 @@ nodes:
       - redis-a
   - key: usrv-b
     layer: microservice
-    color: "#2563eb"
+    color: "#C1E219"
     children:
       - part-b
       - rf-b
@@ -24,7 +24,7 @@ nodes:
       - redis-b
   - key: usrv-c
     layer: microservice
-    color: "#16a34a"
+    color: "#1953C1"
     children:
       - part-c
       - rf-c
@@ -32,9 +32,10 @@ nodes:
       - redis-c
   - key: im
     layer: microservice
+    color: "#FFB919"
   - key: kafka
     layer: application
-    color: "#7c3aed"
+    color: "#19CDA8"
     children:
       - kafka-0
       - kafka-1

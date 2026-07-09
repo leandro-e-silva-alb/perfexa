@@ -322,74 +322,68 @@ class SqliteStorage implements PerfexaStorage {
 
   async savePackage(pkg: ImportedPackage): Promise<void> {
     const packageJson = JSON.stringify(pkg);
-    await this.db.execute("BEGIN");
-    try {
+
+    await this.db.execute("DELETE FROM scenarios WHERE package_id = ?", [pkg.id]);
+    await this.db.execute("DELETE FROM configs WHERE package_id = ?", [pkg.id]);
+    await this.db.execute("DELETE FROM tests WHERE package_id = ?", [pkg.id]);
+    await this.db.execute("DELETE FROM runs WHERE package_id = ?", [pkg.id]);
+    await this.db.execute("DELETE FROM measurements WHERE package_id = ?", [pkg.id]);
+
+    for (const scenario of pkg.scenarios) {
       await this.db.execute(
-        "INSERT OR REPLACE INTO packages (id, name, imported_at, source_path, package_json) VALUES (?, ?, ?, ?, ?)",
-        [pkg.id, pkg.name, pkg.importedAt, pkg.sourcePath ?? null, packageJson]
+        "INSERT INTO scenarios (package_id, scenario_id, name) VALUES (?, ?, ?)",
+        [pkg.id, scenario.scenario_id, scenario.name]
       );
-      await this.db.execute("DELETE FROM scenarios WHERE package_id = ?", [pkg.id]);
-      await this.db.execute("DELETE FROM configs WHERE package_id = ?", [pkg.id]);
-      await this.db.execute("DELETE FROM tests WHERE package_id = ?", [pkg.id]);
-      await this.db.execute("DELETE FROM runs WHERE package_id = ?", [pkg.id]);
-      await this.db.execute("DELETE FROM measurements WHERE package_id = ?", [pkg.id]);
-
-      for (const scenario of pkg.scenarios) {
-        await this.db.execute(
-          "INSERT INTO scenarios (package_id, scenario_id, name) VALUES (?, ?, ?)",
-          [pkg.id, scenario.scenario_id, scenario.name]
-        );
-      }
-
-      for (const config of pkg.configs) {
-        await this.db.execute(
-          "INSERT INTO configs (package_id, config_id, exagon_ver, components_ver) VALUES (?, ?, ?, ?)",
-          [pkg.id, config.config_id, config.exagon_ver, config.components_ver]
-        );
-      }
-
-      for (const test of pkg.tests) {
-        await this.db.execute(
-          "INSERT INTO tests (package_id, scenario_id, config_id) VALUES (?, ?, ?)",
-          [pkg.id, test.scenario_id, test.config_id]
-        );
-      }
-
-      for (const run of pkg.runs) {
-        await this.db.execute(
-          "INSERT INTO runs (package_id, run_id, scenario_id, config_id, sequence_id, target_tps, started_at, duration) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-          [
-            pkg.id,
-            run.run_id,
-            run.scenario_id,
-            run.config_id,
-            run.sequence_id,
-            run.target_tps,
-            run.started_at,
-            run.duration
-          ]
-        );
-      }
-
-      for (const measurement of pkg.measurements) {
-        await this.db.execute(
-          "INSERT INTO measurements (package_id, run_id, metric_id, stat, instance_id, value) VALUES (?, ?, ?, ?, ?, ?)",
-          [
-            pkg.id,
-            measurement.run_id,
-            measurement.metric_id,
-            measurement.stat,
-            measurement.instance_id,
-            measurement.value
-          ]
-        );
-      }
-
-      await this.db.execute("COMMIT");
-    } catch (error) {
-      await this.db.execute("ROLLBACK");
-      throw error;
     }
+
+    for (const config of pkg.configs) {
+      await this.db.execute(
+        "INSERT INTO configs (package_id, config_id, exagon_ver, components_ver) VALUES (?, ?, ?, ?)",
+        [pkg.id, config.config_id, config.exagon_ver, config.components_ver]
+      );
+    }
+
+    for (const test of pkg.tests) {
+      await this.db.execute(
+        "INSERT INTO tests (package_id, scenario_id, config_id) VALUES (?, ?, ?)",
+        [pkg.id, test.scenario_id, test.config_id]
+      );
+    }
+
+    for (const run of pkg.runs) {
+      await this.db.execute(
+        "INSERT INTO runs (package_id, run_id, scenario_id, config_id, sequence_id, target_tps, started_at, duration) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          pkg.id,
+          run.run_id,
+          run.scenario_id,
+          run.config_id,
+          run.sequence_id,
+          run.target_tps,
+          run.started_at,
+          run.duration
+        ]
+      );
+    }
+
+    for (const measurement of pkg.measurements) {
+      await this.db.execute(
+        "INSERT INTO measurements (package_id, run_id, metric_id, stat, instance_id, value) VALUES (?, ?, ?, ?, ?, ?)",
+        [
+          pkg.id,
+          measurement.run_id,
+          measurement.metric_id,
+          measurement.stat,
+          measurement.instance_id,
+          measurement.value
+        ]
+      );
+    }
+
+    await this.db.execute(
+      "INSERT OR REPLACE INTO packages (id, name, imported_at, source_path, package_json) VALUES (?, ?, ?, ?, ?)",
+      [pkg.id, pkg.name, pkg.importedAt, pkg.sourcePath ?? null, packageJson]
+    );
   }
 
   private async migrateRunsTableIfNeeded(): Promise<void> {

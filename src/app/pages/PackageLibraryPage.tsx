@@ -1,4 +1,4 @@
-import { Loader2, SlidersHorizontal, Trash2 } from "lucide-react";
+import { CheckCircle2, Loader2, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "../../components/DataTable";
@@ -7,7 +7,7 @@ import { buildRunSummaries, formatDateTime, scenarioName } from "../../domain/se
 import type { ImportedPackage } from "../../domain/types";
 import { useAppState } from "../AppState";
 
-interface LibraryRow {
+interface PackageLibraryRow {
   id: string;
   name: string;
   importedAt: string;
@@ -21,7 +21,7 @@ interface LibraryRow {
   package: ImportedPackage;
 }
 
-function toLibraryRow(pkg: ImportedPackage): LibraryRow {
+function toPackageLibraryRow(pkg: ImportedPackage): PackageLibraryRow {
   const summaries = buildRunSummaries(pkg);
   const scenarios = [...new Set(pkg.tests.map((test) => scenarioName(pkg, test.scenario_id)))].join(", ");
   const tpsValues = pkg.runs.map((run) => run.target_tps);
@@ -43,8 +43,8 @@ function toLibraryRow(pkg: ImportedPackage): LibraryRow {
   };
 }
 
-export function LibraryPage() {
-  const { deleteImportedPackage, packages, selectPackage, setView } = useAppState();
+export function PackageLibraryPage() {
+  const { activePackageId, deleteImportedPackage, packages, selectPackage, setView } = useAppState();
   const [scenarioFilter, setScenarioFilter] = useState("all");
   const [saturationFilter, setSaturationFilter] = useState("all");
   const [deletingPackageId, setDeletingPackageId] = useState<string>();
@@ -57,7 +57,7 @@ export function LibraryPage() {
 
   const rows = useMemo(() => {
     return packages
-      .map(toLibraryRow)
+      .map(toPackageLibraryRow)
       .filter((row) => scenarioFilter === "all" || row.scenarios.includes(scenarioFilter))
       .filter((row) => {
         if (saturationFilter === "saturated") return row.saturatedRuns > 0;
@@ -66,7 +66,7 @@ export function LibraryPage() {
       });
   }, [packages, saturationFilter, scenarioFilter]);
 
-  async function handleDeletePackage(row: LibraryRow) {
+  async function handleDeletePackage(row: PackageLibraryRow) {
     const confirmed = window.confirm(`Delete "${row.name}" from the library? This cannot be undone.`);
     if (!confirmed) return;
 
@@ -81,8 +81,26 @@ export function LibraryPage() {
     }
   }
 
-  const columns: ColumnDef<LibraryRow>[] = [
-    { header: "Package", accessorKey: "name" },
+  const columns: ColumnDef<PackageLibraryRow>[] = [
+    {
+      header: "Package",
+      accessorKey: "name",
+      cell: ({ row }) => {
+        const isActive = row.original.id === activePackageId;
+
+        return (
+          <div className="library-package-cell">
+            <span>{row.original.name}</span>
+            {isActive ? (
+              <StatusPill tone="info">
+                <CheckCircle2 size={13} aria-hidden="true" />
+                In use
+              </StatusPill>
+            ) : null}
+          </div>
+        );
+      }
+    },
     { header: "Scenarios", accessorKey: "scenarios" },
     { header: "Tests", accessorKey: "tests" },
     { header: "Runs", accessorKey: "runs" },
@@ -106,8 +124,13 @@ export function LibraryPage() {
       id: "action",
       cell: ({ row }) => (
         <span className="library-actions">
-          <button className="button button-small" type="button" onClick={() => selectPackage(row.original.id)}>
-            Open
+          <button
+            className="button button-small"
+            type="button"
+            onClick={() => selectPackage(row.original.id)}
+            disabled={row.original.id === activePackageId}
+          >
+            {row.original.id === activePackageId ? "In use" : "Open"}
           </button>
           <button
             className="button button-small button-danger"
@@ -129,11 +152,11 @@ export function LibraryPage() {
     <div className="page-stack">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Library</p>
+          <p className="eyebrow">Package Library</p>
           <h1>Imported test packages</h1>
         </div>
-        <button className="button button-primary" type="button" onClick={() => setView("import")}>
-          Import package
+        <button className="button button-primary" type="button" onClick={() => setView("package-import")}>
+          Package Import
         </button>
       </header>
 
@@ -180,3 +203,4 @@ export function LibraryPage() {
     </div>
   );
 }
+
