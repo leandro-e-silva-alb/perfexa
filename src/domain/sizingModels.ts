@@ -136,7 +136,7 @@ function buildMaxThrottlingByRun(pkg: ImportedPackage): Map<string, number> {
   const result = new Map<string, number>();
   const topLevel = buildTopologyGraph(pkg.topology).levels[0];
   const projected =
-    topLevel && pkg.metrics.metrics.throttling
+    topLevel && pkg.metrics.metrics.throttling?.topology
       ? resolveTopologyMeasurements(pkg.topology, pkg.metrics, pkg.measurements, "throttling", "max", topLevel).projected
       : [];
   const source =

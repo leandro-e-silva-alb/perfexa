@@ -165,6 +165,7 @@ const contractFiles = [
   "configs.csv",
   "scenarios.csv",
   "measurements.csv",
+  "optional *.runs.csv / *.configs.csv / *.tests.csv / *.scenarios.csv / *.measurements.csv",
   "metrics.yaml",
   "topology.yaml",
   "saturation.yaml",

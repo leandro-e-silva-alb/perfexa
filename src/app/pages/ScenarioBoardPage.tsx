@@ -1,4 +1,4 @@
-import { ArrowDownAZ, ArrowDownZA, CircleHelp } from "lucide-react";
+import { ChevronDown, CircleHelp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { HelpModal } from "../../components/HelpModal";
 import { StatusPill } from "../../components/StatusPill";
@@ -102,8 +102,7 @@ export function ScenarioBoardPage() {
   const scenarioBoardTone = matrix.pendingPairs === 0 && matrix.plannedPairs > 0 ? "ok" : "warn";
   const helpByScenario = activePackage.scenarioHelp?.scenarios ?? {};
   const selectedScenarioHelp = selectedHelpScenarioId ? helpByScenario[selectedHelpScenarioId] : undefined;
-  const ScenarioSortIcon = scenarioSortDirection === "asc" ? ArrowDownAZ : ArrowDownZA;
-  const nextScenarioSortDirection = scenarioSortDirection === "asc" ? "Z-A" : "A-Z";
+  const nextScenarioSortDirection = scenarioSortDirection === "asc" ? "descending" : "ascending";
 
   return (
     <div className="page-stack page-stack-wide">
@@ -154,9 +153,10 @@ export function ScenarioBoardPage() {
                     }
                   >
                     <span>Scenario</span>
-                    <span className="scenario-board-scenario-sort-mark">
-                      <ScenarioSortIcon size={15} aria-hidden="true" />
-                      {scenarioSortDirection === "asc" ? "A-Z" : "Z-A"}
+                    <span
+                      className={`scenario-board-scenario-sort-mark scenario-board-scenario-sort-mark-${scenarioSortDirection}`}
+                    >
+                      <ChevronDown size={15} aria-hidden="true" />
                     </span>
                   </button>
                 </th>

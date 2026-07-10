@@ -4,6 +4,7 @@ import {
   Activity,
   ChartArea,
   ChartLine,
+  ChevronDown,
   CircleAlert,
   Cpu,
   Gauge,
@@ -21,13 +22,14 @@ import {
   formatNumber,
   metricUnit,
   measurementsForScope,
+  RAW_SCOPE,
   runTestIdentities,
   testKeyFor,
   testNameFor,
   type MetricPoint
 } from "../../domain/selectors";
 import { buildTopologyGraph, type TopologyGraph } from "../../domain/topologyMetrics";
-import type { ImportedPackage } from "../../domain/types";
+import type { ImportedPackage, MeasurementRecord } from "../../domain/types";
 import { useAppState } from "../AppState";
 
 type Scope = string;
@@ -54,7 +56,7 @@ type MetricConfig = {
   label: string;
   defaultStat: string;
   fallbackStats?: string[];
-  scopeType: "run" | "topology";
+  scopeType: "raw" | "topology";
 };
 
 const MAX_TOPOLOGY_TOOLTIP_ITEMS = 8;
@@ -204,8 +206,8 @@ function availableStatsForMetric(
 }
 
 const metricConfigs: MetricConfig[] = [
-  { id: "latency", label: "Latency", defaultStat: "p95", fallbackStats: ["avg"], scopeType: "run" },
-  { id: "error_rate", label: "Errors", defaultStat: "avg", scopeType: "run" },
+  { id: "latency", label: "Latency", defaultStat: "p95", fallbackStats: ["avg"], scopeType: "raw" },
+  { id: "error_rate", label: "Errors", defaultStat: "avg", scopeType: "raw" },
   { id: "cpu", label: "CPU", defaultStat: "avg", scopeType: "topology" },
   { id: "memory", label: "Memory", defaultStat: "avg", scopeType: "topology" },
   { id: "throttling", label: "Throttling", defaultStat: "max", scopeType: "topology" }
@@ -219,20 +221,113 @@ const metricIcons: Record<string, LucideIcon> = {
   throttling: Activity
 };
 
+const hiddenExtraMetricIds = new Set([...metricConfigs.map((metric) => metric.id), "throughput"]);
+const preferredDynamicStats = ["avg", "p95", "p99", "p90", "max", "effective", "total", "sum", "count", "min"];
+
+function orderedMetricStats(stats: string[]): string[] {
+  const uniqueStats = [...new Set(stats)];
+  return [
+    ...preferredDynamicStats.filter((stat) => uniqueStats.includes(stat)),
+    ...uniqueStats.filter((stat) => !preferredDynamicStats.includes(stat)).sort()
+  ];
+}
+
+function metricLabel(pkg: ImportedPackage, metricId: string): string {
+  const description = pkg.metrics.metrics[metricId]?.description?.trim().replace(/\.$/, "");
+  if (description) return description;
+
+  return metricId
+    .split("_")
+    .filter(Boolean)
+    .map((part) => {
+      const lower = part.toLowerCase();
+      if (lower === "cpu") return "CPU";
+      if (lower === "io") return "IO";
+      if (lower === "iops") return "IOPS";
+      return `${part.charAt(0).toUpperCase()}${part.slice(1)}`;
+    })
+    .join(" ");
+}
+
 function scopeOptionsForMetric(metric: MetricConfig, pkg: ImportedPackage | null | undefined): string[] {
-  if (metric.scopeType === "run") {
-    return ["run"];
+  if (metric.scopeType === "raw") {
+    return [RAW_SCOPE];
   }
 
   return pkg ? buildTopologyGraph(pkg.topology).levels : [];
 }
 
+function scopeTypeForMetric(
+  pkg: ImportedPackage | null | undefined,
+  metricId: string,
+  fallback: MetricConfig["scopeType"]
+): MetricConfig["scopeType"] {
+  if (!pkg) return fallback;
+  return pkg.metrics.metrics[metricId]?.topology ? "topology" : "raw";
+}
+
+function metricConfigForPackage(
+  metric: MetricConfig,
+  pkg: ImportedPackage | null | undefined
+): MetricConfig {
+  return {
+    ...metric,
+    scopeType: scopeTypeForMetric(pkg, metric.id, metric.scopeType)
+  };
+}
+
+function canGraphMetric(pkg: ImportedPackage, selectedTestKey: string, metric: MetricConfig): boolean {
+  const defaultScope = scopeOptionsForMetric(metric, pkg)[0] ?? RAW_SCOPE;
+
+  try {
+    return measurementsForScope(pkg, metric.id, metric.defaultStat, defaultScope, selectedTestKey).some(
+      (row) => row.test_key === selectedTestKey
+    );
+  } catch {
+    return false;
+  }
+}
+
+function extraMetricConfigsForTest(
+  pkg: ImportedPackage | null | undefined,
+  selectedRunIds: ReadonlySet<string>,
+  selectedTestKey: string
+): MetricConfig[] {
+  if (!pkg || !selectedTestKey || selectedRunIds.size === 0) return [];
+
+  const measurementsByMetric = new Map<string, MeasurementRecord[]>();
+  for (const measurement of pkg.measurements) {
+    if (!selectedRunIds.has(measurement.run_id)) continue;
+    if (hiddenExtraMetricIds.has(measurement.metric_id)) continue;
+    if (!pkg.metrics.metrics[measurement.metric_id]) continue;
+
+    measurementsByMetric.set(measurement.metric_id, [
+      ...(measurementsByMetric.get(measurement.metric_id) ?? []),
+      measurement
+    ]);
+  }
+
+  return [...measurementsByMetric.entries()]
+    .map(([metricId, measurements]) => {
+      const stats = orderedMetricStats(measurements.map((measurement) => measurement.stat));
+      const defaultStat = stats[0] ?? "avg";
+      return {
+        id: metricId,
+        label: metricLabel(pkg, metricId),
+        defaultStat,
+        fallbackStats: stats.filter((stat) => stat !== defaultStat),
+        scopeType: scopeTypeForMetric(pkg, metricId, "raw")
+      };
+    })
+    .filter((metric) => canGraphMetric(pkg, selectedTestKey, metric))
+    .sort((left, right) => left.label.localeCompare(right.label, undefined, { numeric: true }));
+}
+
 export function TestMetricsPage() {
   const { activePackage, setView } = useAppState();
   const [metricId, setMetricId] = useState("latency");
-  const config = metricConfigs.find((item) => item.id === metricId) ?? metricConfigs[0];
-  const [stat, setStat] = useState(config.defaultStat);
-  const [scope, setScope] = useState<Scope>("run");
+  const [stat, setStat] = useState("p95");
+  const [scope, setScope] = useState<Scope>(RAW_SCOPE);
   const [selectedTestKey, setSelectedTestKey] = useState("");
   const [chartMode, setChartMode] = useState<ChartMode>("line");
   const [legendSelected, setLegendSelected] = useState<Record<string, boolean>>({});
@@ -266,6 +361,26 @@ export function TestMetricsPage() {
     );
   }, [activePackage, selectedTestKey]);
 
+  const extraMetricConfigs = useMemo(
+    () => extraMetricConfigsForTest(activePackage, selectedRunIds, selectedTestKey),
+    [activePackage, selectedRunIds, selectedTestKey]
+  );
+  const fixedMetricConfigs = useMemo(
+    () => metricConfigs.map((metric) => metricConfigForPackage(metric, activePackage)),
+    [activePackage]
+  );
+  const allMetricConfigs = useMemo(() => [...fixedMetricConfigs, ...extraMetricConfigs], [extraMetricConfigs, fixedMetricConfigs]);
+  const selectedMetricConfig = allMetricConfigs.find((item) => item.id === metricId);
+  const config = selectedMetricConfig ?? metricConfigs[0];
+  const activeMetricId = selectedMetricConfig?.id ?? config.id;
+  const selectedExtraMetricId = extraMetricConfigs.some((metric) => metric.id === activeMetricId) ? activeMetricId : "";
+
+  useEffect(() => {
+    if (activeMetricId !== metricId) {
+      setMetricId(activeMetricId);
+    }
+  }, [activeMetricId, metricId]);
+
   const availableStats = useMemo(() => {
     return availableStatsForMetric(activePackage, selectedRunIds, config);
   }, [activePackage, config, selectedRunIds]);
@@ -279,7 +394,7 @@ export function TestMetricsPage() {
   useEffect(() => {
     setLegendSelected({});
     setHighlightedSeriesName(null);
-  }, [chartMode, metricId, scope, selectedTestKey, stat]);
+  }, [activeMetricId, chartMode, scope, selectedTestKey, stat]);
 
   const scopeOptions = useMemo(() => {
     return scopeOptionsForMetric(config, activePackage);
@@ -287,19 +402,19 @@ export function TestMetricsPage() {
 
   useEffect(() => {
     if (!scopeOptions.includes(scope)) {
-      setScope(scopeOptions[0] ?? "run");
+      setScope(scopeOptions[0] ?? RAW_SCOPE);
     }
   }, [scope, scopeOptions]);
 
   const rows = useMemo(() => {
     if (!activePackage || !selectedTestKey) return [];
-    return measurementsForScope(activePackage, metricId, stat, scope, selectedTestKey).filter(
+    return measurementsForScope(activePackage, activeMetricId, stat, scope, selectedTestKey).filter(
       (row) => row.test_key === selectedTestKey
     );
-  }, [activePackage, metricId, scope, selectedTestKey, stat]);
+  }, [activeMetricId, activePackage, scope, selectedTestKey, stat]);
 
-  const isAdditiveMetric = ["cpu", "memory"].includes(metricId);
-  const canUseStackedArea = isAdditiveMetric && scope !== "run";
+  const isAdditiveMetric = activePackage?.metrics.metrics[activeMetricId]?.topology?.aggregation === "sum" && config.scopeType === "topology";
+  const canUseStackedArea = isAdditiveMetric && scope !== RAW_SCOPE;
   const effectiveChartMode = canUseStackedArea ? chartMode : "line";
 
   useEffect(() => {
@@ -313,20 +428,24 @@ export function TestMetricsPage() {
     const nextScopes = scopeOptionsForMetric(metric, activePackage);
     setMetricId(metric.id);
     setStat(nextStats[0] ?? metric.defaultStat);
-    setScope(nextScopes[0] ?? "run");
+    setScope(nextScopes[0] ?? RAW_SCOPE);
     setLegendSelected({});
-    if (!["cpu", "memory"].includes(metric.id)) {
+    if (
+      activePackage?.metrics.metrics[metric.id]?.topology?.aggregation !== "sum" ||
+      metric.scopeType !== "topology" ||
+      (nextScopes[0] ?? RAW_SCOPE) === RAW_SCOPE
+    ) {
       setChartMode("line");
     }
   };
 
-  const unit = useMemo(() => (activePackage ? metricUnit(activePackage, metricId) : ""), [activePackage, metricId]);
+  const unit = useMemo(() => (activePackage ? metricUnit(activePackage, activeMetricId) : ""), [activeMetricId, activePackage]);
   const selectedTestLabel = useMemo(
     () => testOptions.find((test) => test.key === selectedTestKey)?.label ?? "No test selected",
     [selectedTestKey, testOptions]
   );
   const seriesNames = useMemo(
-    () => orderSeriesNames([...new Set(rows.map((row) => row.instance_id || row.scope))], topologyGraph, scope),
+    () => orderSeriesNames([...new Set(rows.map((row) => row.instance_id || row.metric_id))], topologyGraph, scope),
     [rows, scope, topologyGraph]
   );
   const normalizedLegendSelected = useMemo(
@@ -346,7 +465,7 @@ export function TestMetricsPage() {
   const seriesRowsByName = useMemo(() => {
     const nextRowsByName = new Map<string, MetricPoint[]>();
     for (const row of rows) {
-      const seriesName = row.instance_id || row.scope;
+      const seriesName = row.instance_id || row.metric_id;
       const seriesRows = nextRowsByName.get(seriesName) ?? [];
       seriesRows.push(row);
       nextRowsByName.set(seriesName, seriesRows);
@@ -359,7 +478,7 @@ export function TestMetricsPage() {
   const valuesBySeriesAndTps = useMemo(
     () =>
       rows.reduce((seriesMap, row) => {
-        const seriesName = row.instance_id || row.scope;
+        const seriesName = row.instance_id || row.metric_id;
         const tpsMap = seriesMap.get(seriesName) ?? new Map<number, { total: number; count: number; runIds: string[] }>();
         const bucket = tpsMap.get(row.effective_tps) ?? { total: 0, count: 0, runIds: [] };
         bucket.total += row.value;
@@ -399,13 +518,13 @@ export function TestMetricsPage() {
         const data =
           effectiveChartMode === "stackedArea"
             ? effectiveTpsValues.map((effectiveTps): StackedAreaDatum => {
-                const bucket = valuesBySeriesAndTps.get(name)?.get(effectiveTps);
-                return [
-                  bucket ? bucket.total / bucket.count : 0,
-                  effectiveTps,
-                  bucket?.runIds.join(", ") ?? ""
-                ];
-              })
+              const bucket = valuesBySeriesAndTps.get(name)?.get(effectiveTps);
+              return [
+                bucket ? bucket.total / bucket.count : 0,
+                effectiveTps,
+                bucket?.runIds.join(", ") ?? ""
+              ];
+            })
             : seriesRows.map((row): ChartDatum => [row.effective_tps, row.value, row.run_id]);
 
         return {
@@ -704,7 +823,7 @@ export function TestMetricsPage() {
     }),
     [clearHighlightedSeries, handleChartMouseOver, handleLegendSelectChanged]
   );
-  const chartKey = `${activePackage?.id ?? "empty"}:${metricId}:${stat}:${scope}:${selectedTestKey}:${effectiveChartMode}`;
+  const chartKey = `${activePackage?.id ?? "empty"}:${activeMetricId}:${stat}:${scope}:${selectedTestKey}:${effectiveChartMode}`;
   const columns = useMemo<ColumnDef<MetricPoint>[]>(
     () => [
       { header: "Run", accessorKey: "run_id" },
@@ -747,99 +866,136 @@ export function TestMetricsPage() {
 
       <section className="panel test-metrics-controls-panel">
         <div className="test-metrics-workbar">
-          <label className="test-metrics-filter-field test-metrics-filter-test">
-            <span className="test-metrics-filter-label">
-              <ListFilter size={15} aria-hidden="true" />
-              Test
-            </span>
-            <select value={selectedTestKey} onChange={(event) => setSelectedTestKey(event.target.value)}>
-              {testOptions.map((test) => (
-                <option key={test.key} value={test.key}>
-                  {test.label}
-                </option>
-              ))}
-            </select>
-          </label>
 
-          <div className="test-metrics-filter-cluster">
-            <span className="test-metrics-filter-label">
-              <Activity size={15} aria-hidden="true" />
-              Metric
-            </span>
-            <div className="test-metrics-filter-group" role="group" aria-label="Metric">
-              {metricConfigs.map((metric) => {
-                const MetricIcon = metricIcons[metric.id] ?? Activity;
-                return (
-                  <button
-                    key={metric.id}
-                    type="button"
-                    className={metric.id === metricId ? "selected" : ""}
-                    onClick={() => selectMetric(metric)}
-                  >
-                    <MetricIcon size={15} aria-hidden="true" />
-                    <span>{metric.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
 
-          <label className="test-metrics-filter-field test-metrics-filter-compact">
-            <span className="test-metrics-filter-label">
-              <Sigma size={15} aria-hidden="true" />
-              Stat
-            </span>
-            <select value={stat} onChange={(event) => setStat(event.target.value)}>
-              {availableStats.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="test-metrics-filter-field test-metrics-filter-compact">
-            <span className="test-metrics-filter-label">
-              <Layers size={15} aria-hidden="true" />
-              {config.scopeType === "topology" ? "Topology level" : "Scope"}
-            </span>
-            <select value={scope} onChange={(event) => setScope(event.target.value)}>
-              {scopeOptions.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {canUseStackedArea ? (
-            <div className="test-metrics-chart-mode" role="group" aria-label="Chart mode">
+          <div className="test-metrics-workbar-row">
+            <div className="test-metrics-filter-cluster">
               <span className="test-metrics-filter-label">
-                <SlidersHorizontal size={15} aria-hidden="true" />
-                Chart
+                <Activity size={15} aria-hidden="true" />
+                Metric
               </span>
-              <div className="test-metrics-icon-toggle">
-                <button
-                  type="button"
-                  className={effectiveChartMode === "line" ? "selected" : ""}
-                  onClick={() => setChartMode("line")}
-                  aria-label="Line chart"
-                >
-                  <ChartLine size={17} aria-hidden="true" />
-                  <span className="control-tooltip">Lines</span>
-                </button>
-                <button
-                  type="button"
-                  className={effectiveChartMode === "stackedArea" ? "selected" : ""}
-                  onClick={() => setChartMode("stackedArea")}
-                  aria-label="Stacked area chart"
-                >
-                  <ChartArea size={17} aria-hidden="true" />
-                  <span className="control-tooltip">Stacked area</span>
-                </button>
+              <div className="test-metrics-filter-group" role="group" aria-label="Metric">
+                {fixedMetricConfigs.map((metric) => {
+                  const MetricIcon = metricIcons[metric.id] ?? Activity;
+                  return (
+                    <button
+                      key={metric.id}
+                      type="button"
+                      className={metric.id === activeMetricId ? "selected" : ""}
+                      onClick={() => selectMetric(metric)}
+                    >
+                      <MetricIcon size={15} aria-hidden="true" />
+                      <span>{metric.label}</span>
+                    </button>
+                  );
+                })}
+                {extraMetricConfigs.length > 0 ? (
+                  <label className={`test-metrics-extra-metric${selectedExtraMetricId ? " selected" : ""}`}>
+                    <Activity size={15} aria-hidden="true" />
+                    <select
+                      aria-label="More metric"
+                      value={selectedExtraMetricId}
+                      onChange={(event) => {
+                        const metric = extraMetricConfigs.find((item) => item.id === event.target.value);
+                        if (metric) {
+                          selectMetric(metric);
+                        }
+                      }}
+                    >
+                      <option value="" disabled>
+                        More
+                      </option>
+                      {extraMetricConfigs.map((metric) => (
+                        <option key={metric.id} value={metric.id}>
+                          {metric.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="test-metrics-extra-chevron" size={14} aria-hidden="true" />
+                  </label>
+                ) : null}
               </div>
             </div>
-          ) : null}
+
+            <div className="test-metrics-workbar-right">
+              {canUseStackedArea ? (
+                <div className="test-metrics-chart-mode test-metrics-workbar-right" role="group" aria-label="Chart mode">
+                  <span className="test-metrics-filter-label">
+                    <SlidersHorizontal size={15} aria-hidden="true" />
+                    Chart
+                  </span>
+                  <div className="test-metrics-icon-toggle">
+                    <button
+                      type="button"
+                      className={effectiveChartMode === "line" ? "selected" : ""}
+                      onClick={() => setChartMode("line")}
+                      aria-label="Line chart"
+                    >
+                      <ChartLine size={17} aria-hidden="true" />
+                      <span className="control-tooltip">Lines</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={effectiveChartMode === "stackedArea" ? "selected" : ""}
+                      onClick={() => setChartMode("stackedArea")}
+                      aria-label="Stacked area chart"
+                    >
+                      <ChartArea size={17} aria-hidden="true" />
+                      <span className="control-tooltip">Stacked area</span>
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div className="test-metrics-workbar-row" >
+            <label className="test-metrics-filter-field test-metrics-filter-test">
+              <span className="test-metrics-filter-label">
+                <ListFilter size={15} aria-hidden="true" />
+                Test
+              </span>
+              <select value={selectedTestKey} onChange={(event) => setSelectedTestKey(event.target.value)}>
+                {testOptions.map((test) => (
+                  <option key={test.key} value={test.key}>
+                    {test.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+
+            <div className="test-metrics-workbar-right">
+              <label className="test-metrics-filter-field test-metrics-filter-compact">
+                <span className="test-metrics-filter-label">
+                  <Sigma size={15} aria-hidden="true" />
+                  Stat
+                </span>
+                <select value={stat} onChange={(event) => setStat(event.target.value)}>
+                  {availableStats.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {config.scopeType === "topology" ? (
+                <label className="test-metrics-filter-field test-metrics-filter-compact">
+                  <span className="test-metrics-filter-label">
+                    <Layers size={15} aria-hidden="true" />
+                    Topology level
+                  </span>
+                  <select value={scope} onChange={(event) => setScope(event.target.value)}>
+                    {scopeOptions.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -850,7 +1006,7 @@ export function TestMetricsPage() {
           onEvents={chartEvents}
           notMerge={false}
           lazyUpdate
-          style={{ height: 340, width: "100%" }}
+          style={{ height: 460, width: "100%" }}
         />
       </section>
 
@@ -866,4 +1022,3 @@ export function TestMetricsPage() {
     </div>
   );
 }
-

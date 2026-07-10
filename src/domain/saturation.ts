@@ -32,6 +32,18 @@ function matchingMeasurements(rule: SaturationRule, run: RunRecord, measurements
   );
 }
 
+function projectedMeasurementsForRules(pkg: ImportedPackage): MeasurementRecord[] {
+  const targets = new Map(
+    pkg.saturation.defaults.saturatedWhen.map((rule) => [`${rule.metric_id}|${rule.stat}`, rule])
+  );
+
+  return [...targets.values()].flatMap((rule) =>
+    pkg.metrics.metrics[rule.metric_id]?.topology
+      ? resolveTopologyMeasurements(pkg.topology, pkg.metrics, pkg.measurements, rule.metric_id, rule.stat).projected
+      : []
+  );
+}
+
 export function evaluateSaturationForRun(pkg: ImportedPackage, run: RunRecord): SaturationEvaluation {
   const override = pkg.saturation.overrides.find((item) => item.run_id === run.run_id);
   if (override) {
@@ -44,7 +56,7 @@ export function evaluateSaturationForRun(pkg: ImportedPackage, run: RunRecord): 
     };
   }
 
-  const measurements = [...pkg.measurements, ...resolveTopologyMeasurements(pkg.topology, pkg.metrics, pkg.measurements).projected];
+  const measurements = [...pkg.measurements, ...projectedMeasurementsForRules(pkg)];
 
   const matchedRules = pkg.saturation.defaults.saturatedWhen.filter((rule) =>
     matchingMeasurements(rule, run, measurements).some((measurement) =>

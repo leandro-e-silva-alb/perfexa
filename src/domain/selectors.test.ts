@@ -20,8 +20,8 @@ function pkg(measurements: MeasurementRecord[]): ImportedPackage {
     manifest: { schemaVersion: 1, components: {} },
     metrics: {
       metrics: {
-        cpu: { aggregation: "sum", unit: "mCPU" },
-        throughput: { aggregation: "sum", unit: "tps" }
+        cpu: { topology: { aggregation: "sum" }, unit: "mCPU" },
+        throughput: { unit: "tps" }
       }
     },
     topology: {

@@ -5,6 +5,13 @@ import type { ValidationIssue } from "./types";
 export interface CsvParseResult<T> {
   rows: T[];
   issues: ValidationIssue[];
+  rowSources: Map<T, CsvRowSource>;
+}
+
+export interface CsvRowSource {
+  file: string;
+  line: number;
+  path: string;
 }
 
 export function parseCsvRows<T>(
@@ -14,6 +21,7 @@ export function parseCsvRows<T>(
   schema: z.ZodType<T, z.ZodTypeDef, unknown>
 ): CsvParseResult<T> {
   const issues: ValidationIssue[] = [];
+  const rowSources = new Map<T, CsvRowSource>();
   const parsed = Papa.parse<Record<string, string>>(text, {
     header: true,
     skipEmptyLines: true,
@@ -64,8 +72,14 @@ export function parseCsvRows<T>(
       }
       return;
     }
-    rows.push(result.data);
+    const parsedRow = result.data;
+    rows.push(parsedRow);
+    rowSources.set(parsedRow, {
+      file,
+      line: index + 2,
+      path: `${file}:${index + 2}`
+    });
   });
 
-  return { rows, issues };
+  return { rows, issues, rowSources };
 }

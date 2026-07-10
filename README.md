@@ -94,13 +94,32 @@ runs.csv
 measurements.csv
 ```
 
+Each CSV table may also be split into additional root-level fragments whose
+filename ends with a dot plus the canonical table name. For example,
+`part2.runs.csv` is merged into `runs.csv`, and `extra.configs.csv` is merged
+into `configs.csv`. The canonical files listed above are still required, and
+validation runs over the merged rows.
+
 Key CSV identities:
 
 - `tests.csv` is the planned scenario/config catalog and is identified by `scenario_id` and `config_id`.
 - `runs.csv` is the execution source of truth and includes `run_id`, `scenario_id`, `config_id`, `sequence_id`, `target_tps`, timing, and duration data.
 - Measurements use `run_id`, `metric_id`, `stat`, `instance_id`, and `value`.
 
-Topology is configured in `topology.yaml` using layers and nodes. Metrics are configured in `metrics.yaml` with aggregation rules such as `sum`, `average`, `ratio`, `percentage`, and `max`.
+Topology is configured in `topology.yaml` using layers and nodes. Metrics are configured in `metrics.yaml`; metrics without a `topology` block are raw metrics, and metrics with a `topology` block can be projected through topology levels.
+
+```yaml
+cpu:
+  unit: mCPU
+  description: CPU usage.
+  topology:
+    aggregation: sum
+latency:
+  unit: ms
+  description: Request latency.
+```
+
+Supported topology aggregation rules are `sum`, `average`, `ratio`, `percentage`, and `max`. Weighted rules use `topology.weight`.
 
 ## GitHub Import
 
@@ -129,5 +148,5 @@ After import, use the Library, Overview, Metrics, Regression, and Comparisons pa
 
 - The desktop app stores imported packages in the local Tauri SQLite database.
 - The browser dev app falls back to browser storage when Tauri APIs are unavailable.
-- CPU regression requires a `cpu` metric in `metrics.yaml`.
+- CPU regression requires a `cpu` metric in `metrics.yaml` with `topology.aggregation: sum`.
 - Topology unknown values are controlled by `unknownValues` in `topology.yaml`: `strict`, `permissive`, or `ignore`.

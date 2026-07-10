@@ -1215,12 +1215,18 @@ button:disabled {
 .scenario-board-scenario-sort-mark {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
   margin-left: auto;
+  min-width: 16px;
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 750;
-  line-height: 1;
+  line-height: 0;
+  transition:
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.scenario-board-scenario-sort-mark-asc {
+  transform: rotate(180deg);
 }
 
 .scenario-board-scenario-sort:hover .scenario-board-scenario-sort-mark {
@@ -1397,9 +1403,17 @@ button:disabled {
 }
 
 .sort-mark {
-  min-width: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 16px;
   color: var(--muted);
-  font-size: 10px;
+  line-height: 0;
+  transition: transform 140ms ease;
+}
+
+.sort-mark-asc {
+  transform: rotate(180deg);
 }
 
 .empty-cell {
@@ -1463,6 +1477,50 @@ input[type="checkbox"] {
 
 .sizing-models-select-cell input {
   cursor: pointer;
+}
+
+.selection-action-spacer {
+  min-width: 1px;
+  width: 1px;
+  margin: 0 8px;
+  height: 1.5pc;
+  background: var(--border-strong);
+}
+
+.selection-action-bar {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  z-index: 35;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 50px;
+  max-width: calc(100% - 48px);
+  padding: 8px 10px 8px 16px;
+  color: var(--text);
+  background: #ffffff;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  box-shadow: 0 16px 46px rgba(15, 23, 42, 0.24);
+  transform: translateX(-50%);
+}
+
+.selection-action-bar strong {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 24px;
+  padding: 0 7px;
+  color: #334155;
+  background: #eef2f6;
+  border-radius: 5px;
+  font-size: 13px;
+}
+
+.selection-action-bar span {
+  white-space: nowrap;
 }
 
 .modal-backdrop {
@@ -1619,12 +1677,33 @@ select {
 }
 
 .test-metrics-workbar {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.test-metrics-workbar-row {
+  display: flex;
+  /* grid-template-columns: minmax(280px, 650px) minmax(0, max-content); */
+  /* align-items: start;
+  justify-content: space-between; */
+  gap: 24px;
+}
+
+/* .test-metrics-workbar-left {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
-  gap: 10px;
-  padding: 12px 14px;
-}
+  gap: 20px;
+  min-width: 0;
+}*/
+
+.test-metrics-workbar-right {
+  display: flex;
+  justify-self: end;
+  margin-left: auto;
+  gap: 24px;
+} 
 
 .test-metrics-filter-field,
 .test-metrics-filter-cluster,
@@ -1635,12 +1714,12 @@ select {
 }
 
 .test-metrics-filter-test {
-  flex: 1 1 360px;
-  max-width: 520px;
+  width: 100%;
+  max-width: 550px;
 }
 
 .test-metrics-filter-compact {
-  flex: 0 0 180px;
+  width: 200px;
 }
 
 .test-metrics-filter-label {
@@ -1712,8 +1791,61 @@ select {
   background: var(--accent);
 }
 
-.test-metrics-chart-mode {
-  margin-left: auto;
+.test-metrics-extra-metric {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px 0 12px;
+  color: var(--muted);
+  background: #ffffff;
+  border-right: 0;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.test-metrics-extra-metric:hover:not(.selected) {
+  color: var(--text);
+  background: var(--surface-muted);
+}
+
+.test-metrics-extra-metric.selected {
+  color: #ffffff;
+  background: var(--accent);
+}
+
+.test-metrics-extra-metric:focus-within {
+  outline: 2px solid #e4efff;
+  outline-offset: -2px;
+}
+
+.test-metrics-extra-metric select {
+  width: 168px;
+  height: 34px;
+  min-width: 0;
+  padding: 0 18px 0 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+  appearance: none;
+}
+
+.test-metrics-extra-metric select option {
+  color: var(--text);
+  background: #ffffff;
+}
+
+.test-metrics-extra-chevron {
+  margin-left: -18px;
+  pointer-events: none;
 }
 
 .test-metrics-icon-toggle {
@@ -2094,5 +2226,14 @@ textarea {
   .filter-popover-body {
     grid-template-columns: 180px minmax(260px, 1fr);
   }
+
+  /* .test-metrics-workbar-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .test-metrics-workbar-right {
+    justify-self: start;
+  } */
 }
 

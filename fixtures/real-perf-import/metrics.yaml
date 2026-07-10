@@ -1,25 +1,57 @@
-metrics:
-  latency:
-    aggregation: max
-    unit: ms
-    description: Request latency.
-  throughput:
+latency:
+  unit: ms
+  description: Request latency.
+throughput:
+  unit: tps
+  description: Throughput.
+error_rate:
+  unit: percent
+  description: Error rate.
+cpu:
+  unit: mCPU
+  description: CPU usage.
+  topology:
     aggregation: sum
-    unit: tps
-    description: Throughput.
-  error_rate:
-    aggregation: max
-    unit: percent
-    description: Error rate.
-  cpu:
+memory:
+  unit: MB
+  description: Memory usage.
+  topology:
     aggregation: sum
-    unit: mCPU
-    description: CPU usage.
-  memory:
-    aggregation: sum
-    unit: MB
-    description: Memory usage.
-  throttling:
+throttling:
+  unit: percent
+  description: CPU throttling.
+  topology:
     aggregation: max
-    unit: percent
-    description: CPU throttling.
+cache_hits:
+  unit: percent
+  description: Cache hits.
+io_throughput_read:
+  unit: MBps
+  description: Read IO Throughput.
+  topology:
+    aggregation: sum
+io_throughput_write:
+  unit: MBps
+  description: Write IO Throughput.
+  topology:
+    aggregation: sum
+iops_read:
+  unit: iops
+  description: Read IOPS.
+  topology:
+    aggregation: sum
+iops_write:
+  unit: iops
+  description: Write IOPS.
+  topology:
+    aggregation: sum
+network_receive:
+  unit: Bps
+  description: Receive Network.
+  topology:
+    aggregation: sum
+network_transmit:
+  unit: Bps
+  description: Transmit Network.
+  topology:
+    aggregation: sum

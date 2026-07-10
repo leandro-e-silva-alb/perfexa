@@ -1,6 +1,6 @@
 import type {
   MetricAggregation,
-  MetricDefinition,
+  MetricTopologyDefinition,
   MetricsDocument,
   MeasurementRecord,
   TopologyLayerDefinition,
@@ -46,6 +46,28 @@ export interface TopologyResolution {
   warnings: ValidationIssue[];
 }
 
+export interface MeasurementSourceContext {
+  file: string;
+  line?: number;
+  path?: string;
+}
+
+export interface TopologyResolutionOptions {
+  sourceForMeasurement?: (measurement: MeasurementRecord) => MeasurementSourceContext | undefined;
+}
+
+export class TopologyResolutionError extends Error {
+  readonly file?: string;
+  readonly path?: string;
+
+  constructor(message: string, source?: MeasurementSourceContext) {
+    super(message);
+    this.name = "TopologyResolutionError";
+    this.file = source?.file;
+    this.path = source?.path;
+  }
+}
+
 type DerivationResult =
   | { status: "derived"; state: MetricState }
   | { status: "ambiguous"; reason: string }
@@ -54,7 +76,7 @@ type DerivationResult =
 interface MetricAggregator {
   kind: MetricAggregation;
   requiresWeight: boolean;
-  observe(value: number, weight: number | undefined, metric: MetricDefinition, metricId: string): MetricState;
+  observe(value: number, weight: number | undefined, metric: MetricTopologyDefinition, metricId: string): MetricState;
   combine(states: MetricState[]): MetricState;
   tryDeriveMissingChild(parent: MetricState, knownChildren: MetricState[]): DerivationResult;
   display(state: MetricState): number;
@@ -70,6 +92,7 @@ interface ObservedMetricGroup {
   observedIds: Set<string>;
   rogueIds: string[];
   ignoredIds: string[];
+  sourceLocations: MeasurementSourceContext[];
 }
 
 function issue(severity: "error" | "warning", message: string, file?: string, path?: string): ValidationIssue {
@@ -115,7 +138,7 @@ abstract class ComponentAggregator implements MetricAggregator {
   abstract requiresWeight: boolean;
   protected abstract keys: string[];
 
-  abstract observe(value: number, weight: number | undefined, metric: MetricDefinition, metricId: string): MetricState;
+  abstract observe(value: number, weight: number | undefined, metric: MetricTopologyDefinition, metricId: string): MetricState;
   abstract combine(states: MetricState[]): MetricState;
   abstract display(metricState: MetricState): number;
 
@@ -216,7 +239,7 @@ class WeightedAggregator extends ComponentAggregator {
     super();
   }
 
-  observe(value: number, weight: number | undefined, metric: MetricDefinition, metricId: string): MetricState {
+  observe(value: number, weight: number | undefined, metric: MetricTopologyDefinition, metricId: string): MetricState {
     invariant(metric.weight, `Metric "${metricId}" uses aggregation "${this.kind}" and must define a weight.`);
     invariant(weight !== undefined, `Metric "${metricId}" needs weight "${metric.weight}".`);
 
@@ -287,23 +310,30 @@ registerMetricAggregator(new WeightedAggregator("percentage", 0.01, 100));
 export function validateMetricsDocument(metrics: MetricsDocument): string[] {
   const errors: string[] = [];
   const metricIds = new Set(Object.keys(metrics.metrics));
+  const cpuTopology = metrics.metrics.cpu?.topology;
 
   if (!metrics.metrics.cpu) {
     errors.push('metrics.yaml must define required metric "cpu" for sizing models.');
-  } else if (metrics.metrics.cpu.aggregation !== "sum") {
-    errors.push('metrics.yaml metric "cpu" must use aggregation "sum" for sizing model CPU totals.');
+  } else if (!cpuTopology) {
+    errors.push('metrics.yaml metric "cpu" must define topology aggregation "sum" for sizing model CPU totals.');
+  } else if (cpuTopology.aggregation !== "sum") {
+    errors.push('metrics.yaml metric "cpu" must use topology aggregation "sum" for sizing model CPU totals.');
   }
 
   for (const [metricId, definition] of Object.entries(metrics.metrics)) {
-    const aggregator = getAggregator(definition.aggregation);
-    if (aggregator.requiresWeight && !definition.weight) {
-      errors.push(`Metric "${metricId}" uses aggregation "${definition.aggregation}" and must define weight.`);
+    if (!definition.topology) continue;
+
+    const aggregator = getAggregator(definition.topology.aggregation);
+    if (aggregator.requiresWeight && !definition.topology.weight) {
+      errors.push(`Metric "${metricId}" uses topology aggregation "${definition.topology.aggregation}" and must define weight.`);
     }
-    if (!aggregator.requiresWeight && definition.weight) {
-      errors.push(`Metric "${metricId}" defines weight, but aggregation "${definition.aggregation}" does not use one.`);
+    if (!aggregator.requiresWeight && definition.topology.weight) {
+      errors.push(
+        `Metric "${metricId}" defines topology weight, but aggregation "${definition.topology.aggregation}" does not use one.`
+      );
     }
-    if (definition.weight && !metricIds.has(definition.weight)) {
-      errors.push(`Metric "${metricId}" references unknown weight metric "${definition.weight}".`);
+    if (definition.topology.weight && !metricIds.has(definition.topology.weight)) {
+      errors.push(`Metric "${metricId}" references unknown topology weight metric "${definition.topology.weight}".`);
     }
   }
 
@@ -557,7 +587,8 @@ export function resolveTopologyMeasurements(
   measurements: MeasurementRecord[],
   metricFilter?: string,
   statFilter?: string,
-  levelFilter?: string
+  levelFilter?: string,
+  options: TopologyResolutionOptions = {}
 ): TopologyResolution {
   const graph = buildTopologyGraph(topology);
   const warnings: ValidationIssue[] = [];
@@ -568,7 +599,7 @@ export function resolveTopologyMeasurements(
     if (!measurement.instance_id) continue;
     if (metricFilter && measurement.metric_id !== metricFilter) continue;
     if (statFilter && measurement.stat !== statFilter) continue;
-    if (!metrics.metrics[measurement.metric_id]) continue;
+    if (!metrics.metrics[measurement.metric_id]?.topology) continue;
 
     const key = [measurement.run_id, measurement.metric_id, measurement.stat].join("|");
     grouped.set(key, [...(grouped.get(key) ?? []), measurement]);
@@ -576,19 +607,38 @@ export function resolveTopologyMeasurements(
 
   for (const groupMeasurements of grouped.values()) {
     const first = groupMeasurements[0];
-    const metric = metrics.metrics[first.metric_id];
-    const observed = buildObservedMetricGroup(graph, metrics, measurements, groupMeasurements, metric, first.metric_id);
+    const metric = metrics.metrics[first.metric_id].topology;
+    if (!metric) continue;
+    const observed = buildObservedMetricGroup(
+      graph,
+      metrics,
+      measurements,
+      groupMeasurements,
+      metric,
+      first.metric_id,
+      options.sourceForMeasurement
+    );
     for (const ignoredId of observed.ignoredIds) {
+      const sourceSummary = formatSourceSummary(observed.sourceLocations);
       warnings.push(
         issue(
           "warning",
-          `Ignoring unknown topology node "${ignoredId}" for ${first.metric_id}/${first.stat} in run "${first.run_id}".`,
-          "measurements.csv"
+          `Ignoring unknown topology node "${ignoredId}" for ${first.metric_id}/${first.stat} in run "${first.run_id}"${
+            sourceSummary ? ` from ${sourceSummary}` : ""
+          }.`,
+          primarySource(observed.sourceLocations)?.file ?? "measurements.csv",
+          primarySource(observed.sourceLocations)?.path
         )
       );
     }
 
-    const resolved = resolveOneMetric(graph, first.metric_id, metric, observed);
+    let resolved: Map<string, MetricState>;
+    try {
+      resolved = resolveOneMetric(graph, first.metric_id, metric, observed);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new TopologyResolutionError(formatResolutionFailure(message, observed), primarySource(observed.sourceLocations));
+    }
     const levels = levelFilter ? graph.levels.filter((level) => level === levelFilter) : graph.levels;
 
     for (const levelName of levels) {
@@ -628,19 +678,27 @@ function buildObservedMetricGroup(
   metrics: MetricsDocument,
   allMeasurements: MeasurementRecord[],
   groupMeasurements: MeasurementRecord[],
-  metric: MetricDefinition,
-  metricId: string
+  metric: MetricTopologyDefinition,
+  metricId: string,
+  sourceForMeasurement?: (measurement: MeasurementRecord) => MeasurementSourceContext | undefined
 ): ObservedMetricGroup {
   const aggregator = getAggregator(metric.aggregation);
   const states = new Map<string, MetricState>();
   const observedIds = new Set<string>();
   const rogueIds: string[] = [];
   const ignoredIds: string[] = [];
+  const sourceLocations = sourcesForMeasurements(groupMeasurements, sourceForMeasurement);
 
   for (const measurement of groupMeasurements) {
     const isKnown = graph.nodes.has(measurement.instance_id);
     if (!isKnown && graph.unknownValues === "strict") {
-      throw new Error(`measurements.csv contains unknown topology node "${measurement.instance_id}", but topology unknownValues mode is strict.`);
+      const source = sourceForMeasurement?.(measurement);
+      throw new TopologyResolutionError(
+        `${source ? formatSourceLocation(source) : "measurements.csv"} contains unknown topology node "${
+          measurement.instance_id
+        }", but topology unknownValues mode is strict.`,
+        source
+      );
     }
     if (!isKnown && graph.unknownValues === "ignore") {
       if (!ignoredIds.includes(measurement.instance_id)) {
@@ -665,14 +723,15 @@ function buildObservedMetricGroup(
     states,
     observedIds,
     rogueIds,
-    ignoredIds
+    ignoredIds,
+    sourceLocations
   };
 }
 
 function readWeight(
   measurements: MeasurementRecord[],
   measurement: MeasurementRecord,
-  metric: MetricDefinition,
+  metric: MetricTopologyDefinition,
   required: boolean
 ): number | undefined {
   if (!required) {
@@ -697,7 +756,7 @@ function readWeight(
 function resolveOneMetric(
   graph: TopologyGraph,
   metricId: string,
-  metric: MetricDefinition,
+  metric: MetricTopologyDefinition,
   observed: ObservedMetricGroup
 ): Map<string, MetricState> {
   const aggregator = getAggregator(metric.aggregation);
@@ -756,7 +815,7 @@ function resolveOneMetric(
     }
   }
 
-  validateResolvedMetric(graph, metricId, metric, states);
+  validateResolvedMetric(graph, metricId, metric, states, observed);
 
   for (const [id, metricState] of observed.states.entries()) {
     if (!graph.nodes.has(id)) {
@@ -770,8 +829,9 @@ function resolveOneMetric(
 function validateResolvedMetric(
   graph: TopologyGraph,
   metricId: string,
-  metric: MetricDefinition,
-  states: Map<string, MetricState>
+  metric: MetricTopologyDefinition,
+  states: Map<string, MetricState>,
+  observed: ObservedMetricGroup
 ): void {
   const aggregator = getAggregator(metric.aggregation);
   const subtreeMemo = new Map<string, boolean>();
@@ -817,7 +877,11 @@ function validateResolvedMetric(
     }
 
     if (!parentState) {
-      errors.push(`Metric "${metricId}" cannot resolve "${node.id}": missing child value(s) ${formatIds(missingChildren)} and no parent observation is available.`);
+      errors.push(
+        `Metric "${metricId}" cannot resolve "${node.id}": missing child value(s) ${formatIds(
+          missingChildren
+        )} and no parent observation is available.${formatMissingMeasurementHint(observed, missingChildren)}`
+      );
       continue;
     }
 
@@ -839,7 +903,7 @@ function validateResolvedMetric(
 
 function assertCompatible(
   metricId: string,
-  metric: MetricDefinition,
+  metric: MetricTopologyDefinition,
   node: TopologyNode,
   observed: MetricState,
   derived: MetricState
@@ -890,6 +954,71 @@ function subtreeHasResolvedState(graph: TopologyGraph, states: Map<string, Metri
 
 function formatComponents(metricState: MetricState): string {
   return JSON.stringify(metricState.components);
+}
+
+function sourcesForMeasurements(
+  measurements: MeasurementRecord[],
+  sourceForMeasurement?: (measurement: MeasurementRecord) => MeasurementSourceContext | undefined
+): MeasurementSourceContext[] {
+  if (!sourceForMeasurement) return [];
+
+  const sources: MeasurementSourceContext[] = [];
+  const seen = new Set<string>();
+  for (const measurement of measurements) {
+    const source = sourceForMeasurement(measurement);
+    if (!source) continue;
+
+    const key = source.path ?? `${source.file}:${source.line ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    sources.push(source);
+  }
+  return sources;
+}
+
+function primarySource(sources: MeasurementSourceContext[]): MeasurementSourceContext | undefined {
+  return sources[0];
+}
+
+function formatSourceLocation(source: MeasurementSourceContext): string {
+  return source.path ?? (source.line === undefined ? source.file : `${source.file}:${source.line}`);
+}
+
+function formatSourceSummary(sources: MeasurementSourceContext[]): string {
+  if (sources.length === 0) return "";
+
+  const linesByFile = new Map<string, number[]>();
+  for (const source of sources) {
+    linesByFile.set(source.file, [...(linesByFile.get(source.file) ?? []), ...(source.line === undefined ? [] : [source.line])]);
+  }
+
+  const summaries = [...linesByFile.entries()].map(([file, lines]) => {
+    const uniqueLines = [...new Set(lines)].sort((left, right) => left - right);
+    if (uniqueLines.length === 0) return file;
+    return `${file}:${uniqueLines[0]}${uniqueLines.length > 1 ? ` (+${uniqueLines.length - 1} more rows)` : ""}`;
+  });
+
+  return summaries.join(", ");
+}
+
+function formatResolutionFailure(message: string, observed: ObservedMetricGroup): string {
+  const sourceSummary = formatSourceSummary(observed.sourceLocations);
+  return `Topology measurement resolution failed for run ${JSON.stringify(observed.runId)}, metric "${
+    observed.metricId
+  }", stat "${observed.stat}"${sourceSummary ? ` from ${sourceSummary}` : ""}.\n${message}`;
+}
+
+function formatCsvCell(value: string): string {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, "\"\"")}"` : value;
+}
+
+function formatMissingMeasurementHint(observed: ObservedMetricGroup, missingInstanceIds: string[]): string {
+  if (missingInstanceIds.length === 0) return "";
+
+  const rows = missingInstanceIds.map((instanceId) =>
+    [observed.runId, observed.metricId, observed.stat, instanceId, "<value>"].map(formatCsvCell).join(",")
+  );
+  return ` Add measurement ${rows.length === 1 ? "row" : "rows"} such as: ${rows.join("; ")}.`;
 }
 
 function formatIds(ids: string[]): string {

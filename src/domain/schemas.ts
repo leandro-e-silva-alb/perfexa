@@ -22,6 +22,12 @@ const requiredText: z.ZodType<string, z.ZodTypeDef, unknown> = textCell.pipe(
   z.string().min(1, "Required")
 );
 
+const optionalText: z.ZodType<string | undefined, z.ZodTypeDef, unknown> = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}, z.string().optional());
+
 const numberCell: z.ZodType<number, z.ZodTypeDef, unknown> = z.preprocess((value) => {
   if (typeof value === "number") return value;
   if (typeof value !== "string") return value;
@@ -92,16 +98,28 @@ export const measurementRecordSchema: z.ZodType<MeasurementRecord, z.ZodTypeDef,
   value: numberCell
 });
 
-export const metricsDocumentSchema: z.ZodType<MetricsDocument, z.ZodTypeDef, unknown> = z.object({
-  metrics: z.record(
-    z.object({
-      aggregation: z.enum(["sum", "average", "ratio", "percentage", "max"]),
-      weight: requiredText.optional(),
-      unit: textCell.optional(),
-      description: textCell.optional()
-    })
-  )
+const metricTopologyDefinitionSchema = z.object({
+  aggregation: z.enum(["sum", "average", "ratio", "percentage", "max"]),
+  weight: optionalText
 });
+
+export const metricsDocumentSchema: z.ZodType<MetricsDocument, z.ZodTypeDef, unknown> = z.preprocess(
+  (value) => {
+    if (value && typeof value === "object" && !Array.isArray(value) && "metrics" in value) {
+      return value;
+    }
+    return { metrics: value };
+  },
+  z.object({
+    metrics: z.record(
+      z.object({
+        unit: optionalText,
+        description: optionalText,
+        topology: metricTopologyDefinitionSchema.optional()
+      })
+    )
+  })
+);
 
 export const manifestDocumentSchema: z.ZodType<ManifestDocument, z.ZodTypeDef, unknown> = z.object({
   schemaVersion: z.literal(1),

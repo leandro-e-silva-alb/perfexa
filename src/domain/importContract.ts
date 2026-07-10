@@ -1,7 +1,7 @@
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
-import { parseCsvRows } from "./csv";
-import { evaluateFeatureAvailability } from "./featureRegistry";
+import { parseCsvRows, type CsvParseResult, type CsvRowSource } from "./csv";
+import { evaluateFeatureAvailability, featureRegistry } from "./featureRegistry";
 import {
   configRecordSchema,
   csvColumns,
@@ -167,6 +167,85 @@ async function readOptionalText(source: ImportFileSource, relativePath: string):
   }
 }
 
+async function listImportRootFiles(
+  source: ImportFileSource,
+  warnings: ValidationIssue[]
+): Promise<string[] | undefined> {
+  if (!source.listFiles) return undefined;
+
+  try {
+    return [...new Set((await source.listFiles()).map(normalizeAssetPath).filter((path) => path.length > 0))];
+  } catch (error) {
+    warnings.push(
+      issue(
+        "warning",
+        error instanceof Error
+          ? `Unable to list package files: ${error.message}. Only canonical CSV files will be imported.`
+          : "Unable to list package files. Only canonical CSV files will be imported.",
+        "import"
+      )
+    );
+    return undefined;
+  }
+}
+
+function csvFragmentFiles(canonicalFile: string, sourceFiles: string[] | undefined): string[] {
+  if (!sourceFiles) return [canonicalFile];
+
+  const suffix = `.${canonicalFile}`;
+  const extras = sourceFiles
+    .filter((file) => !file.includes("/"))
+    .filter((file) => file !== canonicalFile && file.endsWith(suffix))
+    .sort((a, b) => a.localeCompare(b));
+
+  return [canonicalFile, ...extras];
+}
+
+async function parseCsvFragments<T>(
+  source: ImportFileSource,
+  texts: Map<string, string>,
+  sourceFiles: string[] | undefined,
+  canonicalFile: string,
+  requiredColumns: string[],
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>
+): Promise<CsvParseResult<T>> {
+  const rows: T[] = [];
+  const issues: ValidationIssue[] = [];
+  const rowSources = new Map<T, CsvRowSource>();
+
+  for (const file of csvFragmentFiles(canonicalFile, sourceFiles)) {
+    let text: string;
+    if (file === canonicalFile) {
+      text = texts.get(canonicalFile) ?? "";
+    } else {
+      try {
+        text = await source.readText(file);
+      } catch (error) {
+        issues.push(
+          issue(
+            "error",
+            error instanceof Error ? `Unable to read ${file}: ${error.message}` : `Unable to read ${file}.`,
+            file
+          )
+        );
+        continue;
+      }
+    }
+
+    const result = parseCsvRows<T>(file, text, requiredColumns, schema);
+    for (const row of result.rows) {
+      rows.push(row);
+      const rowSource = result.rowSources.get(row);
+      if (rowSource) {
+        rowSources.set(row, rowSource);
+      }
+    }
+    issues.push(...result.issues);
+  }
+
+  return { rows, issues, rowSources };
+}
+
 async function loadScenarioHelpAssets(
   scenarioHelp: ScenarioHelpDocument,
   scenarios: ScenarioRecord[],
@@ -240,6 +319,27 @@ function plannedPairKey(item: Pick<TestRecord | RunRecord, "scenario_id" | "conf
   return `${item.scenario_id} / ${item.config_id}`;
 }
 
+function topologyValidationTargets(saturation: SaturationDocument): Array<{ metric_id: string; stat: string }> {
+  const targets = new Map<string, { metric_id: string; stat: string }>();
+  const addTarget = (metric_id: string, stat: string) => {
+    targets.set(`${metric_id}|${stat}`, { metric_id, stat });
+  };
+
+  for (const feature of featureRegistry) {
+    for (const requirement of feature.requirements) {
+      if (requirement.instance_id === undefined) {
+        addTarget(requirement.metric_id, requirement.stat);
+      }
+    }
+  }
+
+  for (const rule of saturation.defaults.saturatedWhen) {
+    addTarget(rule.metric_id, rule.stat);
+  }
+
+  return [...targets.values()];
+}
+
 function crossValidate(input: {
   metrics: MetricsDocument;
   topology: TopologyDocument;
@@ -250,10 +350,24 @@ function crossValidate(input: {
   tests: TestRecord[];
   runs: RunRecord[];
   measurements: MeasurementRecord[];
+  measurementSources: Map<MeasurementRecord, CsvRowSource>;
   errors: ValidationIssue[];
   warnings: ValidationIssue[];
 }) {
-  const { metrics, topology, saturation, notes, scenarios, configs, tests, runs, measurements, errors, warnings } = input;
+  const {
+    metrics,
+    topology,
+    saturation,
+    notes,
+    scenarios,
+    configs,
+    tests,
+    runs,
+    measurements,
+    measurementSources,
+    errors,
+    warnings
+  } = input;
   const runIds = uniqueValues(runs.map((run) => run.run_id));
   const plannedPairKeys = uniqueValues(tests.map(plannedPairKey));
   const configIds = uniqueValues(configs.map((config) => config.config_id));
@@ -361,11 +475,34 @@ function crossValidate(input: {
   }
 
   if (errors.length === 0) {
-    try {
-      const resolution = resolveTopologyMeasurements(topology, metrics, measurements);
-      warnings.push(...resolution.warnings);
-    } catch (error) {
-      errors.push(issue("error", error instanceof Error ? error.message : String(error), "measurements.csv"));
+    for (const target of topologyValidationTargets(saturation)) {
+      if (!metricIds.has(target.metric_id)) continue;
+      if (!metrics.metrics[target.metric_id]?.topology) continue;
+
+      try {
+        const resolution = resolveTopologyMeasurements(
+          topology,
+          metrics,
+          measurements,
+          target.metric_id,
+          target.stat,
+          undefined,
+          {
+            sourceForMeasurement: (measurement) => measurementSources.get(measurement)
+          }
+        );
+        warnings.push(...resolution.warnings);
+      } catch (error) {
+        const topologyError = error as { file?: string; path?: string };
+        errors.push(
+          issue(
+            "error",
+            error instanceof Error ? error.message : String(error),
+            topologyError.file ?? "measurements.csv",
+            topologyError.path
+          )
+        );
+      }
     }
   }
 
@@ -460,7 +597,6 @@ export async function validateImportSource(source: ImportFileSource): Promise<Im
     manifestDocumentSchema,
     errors
   );
-  const metrics = parseYamlDocument<MetricsDocument>("metrics.yaml", texts.get("metrics.yaml") ?? "", metricsDocumentSchema, errors);
   const topology = parseYamlDocument<TopologyDocument>(
     "topology.yaml",
     texts.get("topology.yaml") ?? "",
@@ -474,6 +610,12 @@ export async function validateImportSource(source: ImportFileSource): Promise<Im
     errors
   );
   const notes = parseYamlDocument<NotesDocument>("notes.yaml", texts.get("notes.yaml") ?? "", notesDocumentSchema, errors);
+  const metrics = parseYamlDocument<MetricsDocument>(
+    "metrics.yaml",
+    texts.get("metrics.yaml") ?? "",
+    metricsDocumentSchema,
+    errors
+  );
   const scenarioHelpText = await readOptionalText(source, optionalScenarioHelpFile);
   const parsedScenarioHelp = scenarioHelpText !== undefined
     ? parseYamlDocument<ScenarioHelpDocument>(
@@ -483,33 +625,48 @@ export async function validateImportSource(source: ImportFileSource): Promise<Im
         errors
       )
     : undefined;
+  const sourceFiles = await listImportRootFiles(source, warnings);
 
-  const runsResult = parseCsvRows<RunRecord>("runs.csv", texts.get("runs.csv") ?? "", csvColumns.runs, runRecordSchema);
-  const testsResult = parseCsvRows<TestRecord>(
+  const runsResult = await parseCsvFragments<RunRecord>(
+    source,
+    texts,
+    sourceFiles,
+    "runs.csv",
+    csvColumns.runs,
+    runRecordSchema
+  );
+  const testsResult = await parseCsvFragments<TestRecord>(
+    source,
+    texts,
+    sourceFiles,
     "tests.csv",
-    texts.get("tests.csv") ?? "",
     csvColumns.tests,
     testRecordSchema
   );
-  const configsResult = parseCsvRows<ConfigRecord>(
+  const configsResult = await parseCsvFragments<ConfigRecord>(
+    source,
+    texts,
+    sourceFiles,
     "configs.csv",
-    texts.get("configs.csv") ?? "",
     csvColumns.configs,
     configRecordSchema
   );
-  const scenariosResult = parseCsvRows<ScenarioRecord>(
+  const scenariosResult = await parseCsvFragments<ScenarioRecord>(
+    source,
+    texts,
+    sourceFiles,
     "scenarios.csv",
-    texts.get("scenarios.csv") ?? "",
     csvColumns.scenarios,
     scenarioRecordSchema
   );
-  const measurementsResult = parseCsvRows<MeasurementRecord>(
+  const measurementsResult = await parseCsvFragments<MeasurementRecord>(
+    source,
+    texts,
+    sourceFiles,
     "measurements.csv",
-    texts.get("measurements.csv") ?? "",
     csvColumns.measurements,
     measurementRecordSchema
   );
-
   errors.push(
     ...runsResult.issues.filter((item) => item.severity === "error"),
     ...testsResult.issues.filter((item) => item.severity === "error"),
@@ -524,10 +681,8 @@ export async function validateImportSource(source: ImportFileSource): Promise<Im
     ...scenariosResult.issues.filter((item) => item.severity === "warning"),
     ...measurementsResult.issues.filter((item) => item.severity === "warning")
   );
-
   if (manifest && metrics && topology && saturation && notes) {
     crossValidate({
-      manifest,
       metrics,
       topology,
       saturation,
@@ -537,21 +692,9 @@ export async function validateImportSource(source: ImportFileSource): Promise<Im
       tests: testsResult.rows,
       runs: runsResult.rows,
       measurements: measurementsResult.rows,
+      measurementSources: measurementsResult.rowSources,
       errors,
       warnings
-    } as {
-      manifest: ManifestDocument;
-      metrics: MetricsDocument;
-      topology: TopologyDocument;
-      saturation: SaturationDocument;
-      notes: NotesDocument;
-      scenarios: ScenarioRecord[];
-      configs: ConfigRecord[];
-      tests: TestRecord[];
-      runs: RunRecord[];
-      measurements: MeasurementRecord[];
-      errors: ValidationIssue[];
-      warnings: ValidationIssue[];
     });
   }
 

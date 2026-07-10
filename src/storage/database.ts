@@ -48,9 +48,17 @@ function isStringArray(value: unknown): value is string[] {
 
 function hasCurrentMetrics(value: unknown): value is MetricsDocument {
   if (!isRecord(value) || !isRecord(value.metrics)) return false;
-  return Object.values(value.metrics).every(
-    (definition) => isRecord(definition) && isMetricAggregation(definition.aggregation)
-  );
+  return Object.values(value.metrics).every((definition) => {
+    if (!isRecord(definition)) return false;
+    if (definition.unit !== undefined && !isString(definition.unit)) return false;
+    if (definition.description !== undefined && !isString(definition.description)) return false;
+    if (definition.topology === undefined) return true;
+    return (
+      isRecord(definition.topology) &&
+      isMetricAggregation(definition.topology.aggregation) &&
+      (definition.topology.weight === undefined || isString(definition.topology.weight))
+    );
+  });
 }
 
 function hasCurrentTopology(value: unknown): value is TopologyDocument {

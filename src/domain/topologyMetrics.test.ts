@@ -23,12 +23,12 @@ const topology: TopologyDocument = {
 
 const metrics: MetricsDocument = {
   metrics: {
-    wins: { aggregation: "ratio", weight: "matches" },
-    matches: { aggregation: "sum" },
-    city_max_wins: { aggregation: "max" },
-    time_avg: { aggregation: "average", weight: "matches" },
-    wins_per: { aggregation: "percentage", weight: "matches" },
-    cpu: { aggregation: "sum", unit: "mCPU" }
+    wins: { topology: { aggregation: "ratio", weight: "matches" } },
+    matches: { topology: { aggregation: "sum" } },
+    city_max_wins: { topology: { aggregation: "max" } },
+    time_avg: { topology: { aggregation: "average", weight: "matches" } },
+    wins_per: { topology: { aggregation: "percentage", weight: "matches" } },
+    cpu: { topology: { aggregation: "sum" }, unit: "mCPU" }
   }
 };
 
@@ -85,10 +85,13 @@ describe("topology metric resolver", () => {
   });
 
   it("validates metric definitions required for sizing models", () => {
-    expect(validateMetricsDocument({ metrics: { cpu: { aggregation: "max" } } })).toContain(
-      'metrics.yaml metric "cpu" must use aggregation "sum" for sizing model CPU totals.'
+    expect(validateMetricsDocument({ metrics: { cpu: { topology: { aggregation: "max" } } } })).toContain(
+      'metrics.yaml metric "cpu" must use topology aggregation "sum" for sizing model CPU totals.'
     );
-    expect(validateMetricsDocument({ metrics: { matches: { aggregation: "sum" } } })).toContain(
+    expect(validateMetricsDocument({ metrics: { cpu: {}, matches: { topology: { aggregation: "sum" } } } })).toContain(
+      'metrics.yaml metric "cpu" must define topology aggregation "sum" for sizing model CPU totals.'
+    );
+    expect(validateMetricsDocument({ metrics: { matches: { topology: { aggregation: "sum" } } } })).toContain(
       'metrics.yaml must define required metric "cpu" for sizing models.'
     );
   });
@@ -126,7 +129,7 @@ describe("topology metric resolver", () => {
       nodes: [{ key: "kafka", layer: "group", children: ["kafka-0", "kafka-1"] }]
     };
     const parentOnlyMetrics: MetricsDocument = {
-      metrics: { cpu: { aggregation: "sum" } }
+      metrics: { cpu: { topology: { aggregation: "sum" } } }
     };
     const projected = resolveTopologyMeasurements(
       parentOnlyTopology,
@@ -169,7 +172,9 @@ describe("topology metric resolver", () => {
   });
 
   it("detects ambiguous max derivation", () => {
-    const maxMetrics: MetricsDocument = { metrics: { cpu: { aggregation: "sum" }, peak: { aggregation: "max" } } };
+    const maxMetrics: MetricsDocument = {
+      metrics: { cpu: { topology: { aggregation: "sum" } }, peak: { topology: { aggregation: "max" } } }
+    };
     const maxMeasurements = [
       row("run-001", "peak", "max", "america", 20),
       row("run-001", "peak", "max", "rio", 20),

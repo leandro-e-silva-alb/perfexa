@@ -61,11 +61,15 @@ export interface MeasurementRecord {
   value: number;
 }
 
-export interface MetricDefinition {
+export interface MetricTopologyDefinition {
   aggregation: MetricAggregation;
   weight?: MetricId;
+}
+
+export interface MetricDefinition {
   unit?: string;
   description?: string;
+  topology?: MetricTopologyDefinition;
 }
 
 export interface MetricsDocument {
@@ -205,6 +209,7 @@ export interface ImportFileSource {
   sourcePath?: string;
   readText(relativePath: string): Promise<string>;
   readBytes(relativePath: string): Promise<Uint8Array>;
+  listFiles?(): Promise<string[]>;
   hasDirectory?(relativePath: string): Promise<boolean | undefined>;
 }
 

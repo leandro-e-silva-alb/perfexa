@@ -11,7 +11,7 @@ import {
   Search,
   X
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DataTable } from "../../components/DataTable";
 import { StatusPill } from "../../components/StatusPill";
 import { buildRunSummaries, formatDateTime, formatNumber, type RunSummary } from "../../domain/selectors";
@@ -138,6 +138,9 @@ export function RunExplorerPage() {
   const [visibleColumnIds, setVisibleColumnIds] = useState<RunExplorerColumnId[]>(defaultColumnIds);
   const [draggedColumnId, setDraggedColumnId] = useState<RunExplorerColumnId>();
   const [filters, setFilters] = useState<RunExplorerFilters>(emptyFilters);
+  const filterPopoverHostRef = useRef<HTMLDivElement>(null);
+  const groupPopoverHostRef = useRef<HTMLDivElement>(null);
+  const columnsPopoverHostRef = useRef<HTMLDivElement>(null);
 
   const rows = useMemo(
     () => (activePackage ? buildRunSummaries(activePackage) : []),
@@ -154,6 +157,28 @@ export function RunExplorerPage() {
     setGroupBy("none");
     setCollapsedGroups([]);
   }, [activePackage?.id]);
+
+  useEffect(() => {
+    if (!filtersOpen && !groupOpen && !columnsOpen) return;
+
+    function closeOpenPopoversOnOutsidePointerDown(event: PointerEvent): void {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+
+      if (filtersOpen && !filterPopoverHostRef.current?.contains(target)) {
+        setFiltersOpen(false);
+      }
+      if (groupOpen && !groupPopoverHostRef.current?.contains(target)) {
+        setGroupOpen(false);
+      }
+      if (columnsOpen && !columnsPopoverHostRef.current?.contains(target)) {
+        setColumnsOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", closeOpenPopoversOnOutsidePointerDown);
+    return () => document.removeEventListener("pointerdown", closeOpenPopoversOnOutsidePointerDown);
+  }, [columnsOpen, filtersOpen, groupOpen]);
 
   if (!activePackage) {
     return (
@@ -509,7 +534,7 @@ export function RunExplorerPage() {
             />
           </label>
 
-          <div className="run-explorer-action-host">
+          <div className="run-explorer-action-host" ref={filterPopoverHostRef}>
             <button
               className={`button run-explorer-toolbar-button ${filtersOpen ? "toolbar-selected" : ""}`}
               type="button"
@@ -581,7 +606,7 @@ export function RunExplorerPage() {
             ) : null}
           </div>
 
-          <div className="run-explorer-action-host">
+          <div className="run-explorer-action-host" ref={groupPopoverHostRef}>
             <button
               className={`button run-explorer-toolbar-button ${groupOpen || groupBy !== "none" ? "toolbar-selected" : ""}`}
               type="button"
@@ -615,7 +640,7 @@ export function RunExplorerPage() {
             ) : null}
           </div>
 
-          <div className="run-explorer-action-host">
+          <div className="run-explorer-action-host" ref={columnsPopoverHostRef}>
             <button
               className={`button run-explorer-toolbar-button ${columnsOpen ? "toolbar-selected" : ""}`}
               type="button"

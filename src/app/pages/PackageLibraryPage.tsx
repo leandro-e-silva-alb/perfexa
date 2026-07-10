@@ -94,7 +94,7 @@ export function PackageLibraryPage() {
             {isActive ? (
               <StatusPill tone="info">
                 <CheckCircle2 size={13} aria-hidden="true" />
-                In use
+                Active
               </StatusPill>
             ) : null}
           </div>
@@ -130,7 +130,7 @@ export function PackageLibraryPage() {
             onClick={() => selectPackage(row.original.id)}
             disabled={row.original.id === activePackageId}
           >
-            {row.original.id === activePackageId ? "In use" : "Open"}
+            {row.original.id === activePackageId ? "Active" : "Open"}
           </button>
           <button
             className="button button-small button-danger"

@@ -74,6 +74,8 @@ export interface ScenarioBoardMatrix {
   unplannedRuns: number;
 }
 
+export const RAW_SCOPE = "raw";
+
 export type RunTestIdentity = Pick<RunRecord, "scenario_id" | "config_id" | "sequence_id">;
 
 export function formatNumber(value: number | undefined, digits = 2): string {
@@ -409,9 +411,12 @@ export function measurementsForScope(
   scope: string,
   selectedTestKey?: string
 ): MetricPoint[] {
-  const source = scope === "run"
-    ? pkg.measurements.filter((measurement) => measurement.instance_id === "")
-    : topologyMeasurementsForTest(pkg, metricId, stat, scope, selectedTestKey);
+  const source =
+    scope === RAW_SCOPE
+      ? pkg.measurements
+      : scope === "run"
+        ? pkg.measurements.filter((measurement) => measurement.instance_id === "")
+        : topologyMeasurementsForTest(pkg, metricId, stat, scope, selectedTestKey);
 
   return source
     .filter(

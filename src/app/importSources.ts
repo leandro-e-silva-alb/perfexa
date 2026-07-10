@@ -39,6 +39,10 @@ function normalizeImportPath(path: string): string {
   return normalizeZipPath(path).replace(/\/+$/, "");
 }
 
+function isRootPath(path: string): boolean {
+  return normalizeImportPath(path).length > 0 && !normalizeImportPath(path).includes("/");
+}
+
 function isSystemZipEntry(path: string): boolean {
   return path === "__MACOSX" || path.startsWith("__MACOSX/") || path.endsWith("/.DS_Store");
 }
@@ -117,6 +121,13 @@ async function sourceFromLoadedZip(
       if (!entry) throw new Error("File not found in zip");
       return entry.async("uint8array");
     },
+    listFiles: async () =>
+      filePaths
+        .filter((path) => path.startsWith(rootPrefix))
+        .map((path) => path.slice(rootPrefix.length))
+        .map(normalizeImportPath)
+        .filter(isRootPath)
+        .sort((a, b) => a.localeCompare(b)),
     hasDirectory: async (relativePath) => {
       const directoryPath = normalizeImportPath(`${rootPrefix}${normalizeImportPath(relativePath)}`);
       return directoryPaths.has(directoryPath) || filePaths.some((path) => path.startsWith(`${directoryPath}/`));
@@ -166,6 +177,14 @@ export async function selectTauriFolderSource(): Promise<ImportFileSource | unde
     sourcePath: selected,
     readText: (relativePath) => fs.readTextFile(joinPath(selected, relativePath)),
     readBytes: (relativePath) => fs.readFile(joinPath(selected, relativePath)),
+    listFiles: async () => {
+      const entries = await fs.readDir(selected);
+      return entries
+        .filter((entry) => entry.isFile)
+        .map((entry) => normalizeImportPath(entry.name))
+        .filter(isRootPath)
+        .sort((a, b) => a.localeCompare(b));
+    },
     hasDirectory: async (relativePath) => {
       try {
         await fs.readDir(joinPath(selected, relativePath));
@@ -217,6 +236,11 @@ export function sourceFromFileList(files: FileList): ImportFileSource {
       const file = fileMap.get(relativePath);
       if (!file) throw new Error("File not selected");
       return new Uint8Array(await file.arrayBuffer());
-    }
+    },
+    listFiles: async () =>
+      [...fileMap.keys()]
+        .map(normalizeImportPath)
+        .filter(isRootPath)
+        .sort((a, b) => a.localeCompare(b))
   };
 }

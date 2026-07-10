@@ -1,4 +1,4 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { validateImportSource } from "./importContract";
 import { evaluateSaturationForRun } from "./saturation";
@@ -16,31 +16,30 @@ components:
     kind: infrastructure
 `,
   "metrics.yaml": `
-metrics:
-  latency:
-    aggregation: max
-    unit: ms
-    description: Latency.
-  throughput:
+latency:
+  unit: ms
+  description: Latency.
+throughput:
+  unit: tps
+  description: Throughput.
+error_rate:
+  unit: percent
+  description: Error rate.
+cpu:
+  unit: mCPU
+  description: CPU.
+  topology:
     aggregation: sum
-    unit: tps
-    description: Throughput.
-  error_rate:
-    aggregation: max
-    unit: percent
-    description: Error rate.
-  cpu:
+memory:
+  unit: MB
+  description: Memory.
+  topology:
     aggregation: sum
-    unit: mCPU
-    description: CPU.
-  memory:
-    aggregation: sum
-    unit: MB
-    description: Memory.
-  throttling:
+throttling:
+  unit: percent
+  description: Throttling.
+  topology:
     aggregation: max
-    unit: percent
-    description: Throttling.
 `,
   "topology.yaml": `
 unknownValues: strict
@@ -108,17 +107,28 @@ function source(files: TestFileMap): ImportFileSource {
       if (typeof value === "string") return new TextEncoder().encode(value);
       return value;
     },
+    listFiles: async () => Object.keys(files),
     hasDirectory: async (relativePath) => relativePath === "raw"
   };
 }
 
-function fixtureSource(rootName: string): ImportFileSource {
+function fixtureSource(rootName: string, options: { listFiles?: boolean } = {}): ImportFileSource {
   return {
     rootName,
     readText: async (relativePath) =>
       readFile(new URL(`../../fixtures/${rootName}/${relativePath}`, import.meta.url), "utf8"),
     readBytes: async (relativePath) =>
       new Uint8Array(await readFile(new URL(`../../fixtures/${rootName}/${relativePath}`, import.meta.url))),
+    ...(options.listFiles
+      ? {
+          listFiles: async () => {
+            const entries = await readdir(new URL(`../../fixtures/${rootName}/`, import.meta.url), {
+              withFileTypes: true
+            });
+            return entries.filter((entry) => entry.isFile()).map((entry) => entry.name);
+          }
+        }
+      : {}),
     hasDirectory: async (relativePath) => {
       try {
         return (await stat(new URL(`../../fixtures/${rootName}/${relativePath}`, import.meta.url))).isDirectory();
@@ -139,6 +149,113 @@ describe("import contract", () => {
     expect(result.report.features.find((feature) => feature.featureId === "run-explorer")?.status).toBe(
       "available"
     );
+  });
+
+  it("accepts split CSV fragments that end with the canonical table name", async () => {
+    const result = await validateImportSource(
+      source({
+        ...validFiles,
+        "extra.configs.csv": `config_id,exagon_ver,components_ver
+cfg-extra,3.14.0,"kafka:3.8.0"
+`,
+        "extra.tests.csv": `scenario_id,config_id
+checkout,cfg-extra
+`,
+        "part2.runs.csv": `run_id,scenario_id,config_id,sequence_id,target_tps,started_at,duration
+run-002,checkout,cfg-extra,1,450,2026-06-20T10:00:00Z,30m
+`,
+        "raw/debug.runs.csv": `run_id,scenario_id,config_id,sequence_id,target_tps,started_at,duration
+run-raw,checkout,cfg-extra,2,500,2026-06-20T11:00:00Z,30m
+`
+      })
+    );
+
+    expect(result.report.valid).toBe(true);
+    expect(result.package?.runs.map((run) => run.run_id)).toEqual(["run-001", "run-002"]);
+    expect(result.package?.configs.map((config) => config.config_id)).toEqual(["cfg-main", "cfg-extra"]);
+    expect(result.package?.tests.map((test) => `${test.scenario_id}/${test.config_id}`)).toEqual([
+      "checkout/cfg-main",
+      "checkout/cfg-extra"
+    ]);
+  });
+
+  it("reports split CSV parse issues against the fragment file", async () => {
+    const result = await validateImportSource(
+      source({
+        ...validFiles,
+        "bad.runs.csv": `run_id,scenario_id
+run-002,checkout
+`
+      })
+    );
+
+    expect(result.report.valid).toBe(false);
+    expect(result.report.errors).toContainEqual({
+      severity: "error",
+      file: "bad.runs.csv",
+      message: 'Missing required column "config_id".'
+    });
+  });
+
+  it("reports topology measurement failures against the originating fragment", async () => {
+    const result = await validateImportSource(
+      source({
+        ...validFiles,
+        "topology.yaml": `
+unknownValues: strict
+layers:
+  - key: microservice
+  - key: application
+nodes:
+  - key: usrv-a
+    layer: microservice
+    children: [orch-a, redis-a]
+  - key: orch-a
+    layer: application
+  - key: redis-a
+    layer: application
+`,
+        "measurements.csv": `run_id,metric_id,stat,instance_id,value
+`,
+        "problem.measurements.csv": `run_id,metric_id,stat,instance_id,value
+run-001,throttling,max,orch-a,0
+`
+      })
+    );
+
+    expect(result.report.valid).toBe(false);
+    expect(result.report.errors).toContainEqual(
+      expect.objectContaining({
+        severity: "error",
+        file: "problem.measurements.csv",
+        path: "problem.measurements.csv:2"
+      })
+    );
+    expect(result.report.errors[0].message).toContain('run "run-001"');
+    expect(result.report.errors[0].message).toContain("problem.measurements.csv:2");
+    expect(result.report.errors[0].message).toContain("run-001,throttling,max,redis-a,<value>");
+  });
+
+  it("accepts additional metric definitions from metrics YAML", async () => {
+    const result = await validateImportSource(
+      source({
+        ...validFiles,
+        "metrics.yaml": `${validFiles["metrics.yaml"]}queue_depth:
+  unit: count
+  description: Queue depth.
+  topology:
+    aggregation: max
+`,
+        "measurements.csv": `${validFiles["measurements.csv"]}run-001,queue_depth,max,,5\n`
+      })
+    );
+
+    expect(result.report.valid).toBe(true);
+    expect(result.package?.metrics.metrics.queue_depth).toEqual({
+      unit: "count",
+      description: "Queue depth.",
+      topology: { aggregation: "max" }
+    });
   });
 
   it("accepts valid scenario help with categories and an image", async () => {
@@ -247,7 +364,16 @@ scenarios:
 
     expect(result.report.valid).toBe(true);
     expect(result.package?.runs).toHaveLength(81);
-    expect(result.package?.configs).toHaveLength(4);
+    expect(result.package?.configs).toHaveLength(5);
+  });
+
+  it("accepts the real performance fixture with split root CSV fragments", async () => {
+    const result = await validateImportSource(fixtureSource("real-perf-import", { listFiles: true }));
+
+    expect(result.report.errors).toEqual([]);
+    expect(result.report.valid).toBe(true);
+    expect(result.package?.runs.length).toBeGreaterThan(81);
+    expect(result.package?.measurements.some((measurement) => measurement.run_id === "202607081428")).toBe(true);
   });
 
   it("accepts stored group measurements as topology constraints", async () => {

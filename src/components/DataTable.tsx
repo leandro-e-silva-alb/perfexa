@@ -7,7 +7,7 @@ import {
   type ColumnDef,
   type SortingState
 } from "@tanstack/react-table";
-import { Search } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import { useState } from "react";
 
 interface DataTableProps<TData> {
@@ -65,6 +65,7 @@ export function DataTable<TData>({
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
                   const meta = header.column.columnDef.meta as { hideSortMarker?: boolean } | undefined;
+                  const sortDirection = header.column.getIsSorted();
 
                   return (
                     <th key={header.id}>
@@ -75,12 +76,8 @@ export function DataTable<TData>({
                           onClick={header.column.getToggleSortingHandler()}
                         >
                           {flexRender(header.column.columnDef.header, header.getContext())}
-                          <span className="sort-mark">
-                            {header.column.getIsSorted() === "asc"
-                              ? "A-Z"
-                              : header.column.getIsSorted() === "desc"
-                                ? "Z-A"
-                                : ""}
+                          <span className={`sort-mark ${sortDirection ? `sort-mark-${sortDirection}` : ""}`}>
+                            {sortDirection ? <ChevronDown size={14} aria-hidden="true" /> : null}
                           </span>
                         </button>
                       ) : (
