@@ -1,7 +1,7 @@
 import EChartsReact from "echarts-for-react";
-import { Activity, Calculator, Cpu, Gauge, GitCompare, Plus, Trash2, X } from "lucide-react";
+import { Activity, Calculator, ChevronLeft, ChevronRight, Cpu, Gauge, GitCompare, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { StatusPill } from "../../components/StatusPill";
 import {
   buildCpuSizingModelAnalyses,
@@ -194,6 +194,10 @@ export function TestComparePage() {
   const [tpsInput, setTpsInput] = useState("1");
   const [cpuInput, setCpuInput] = useState("10");
   const initializedPackageId = useRef<string>();
+  const detailCarouselRef = useRef<HTMLDivElement>(null);
+  const detailCarouselSyncTimeoutRef = useRef<number | undefined>();
+  const suppressDetailCarouselScrollSyncRef = useRef(false);
+  const [activeDetailIndex, setActiveDetailIndex] = useState(0);
 
   const analyses = useMemo(
     () => (activePackage ? buildCpuSizingModelAnalyses(activePackage) : []),
@@ -249,6 +253,93 @@ export function TestComparePage() {
     );
   }, [availableTests]);
 
+  useEffect(() => {
+    suppressDetailCarouselScrollSyncRef.current = false;
+    clearPendingDetailCarouselSync();
+    setActiveDetailIndex((current) => Math.min(current, Math.max(selectedTests.length - 1, 0)));
+  }, [selectedTests.length]);
+
+  useEffect(() => {
+    return () => {
+      clearPendingDetailCarouselSync();
+    };
+  }, []);
+
+  function clearPendingDetailCarouselSync() {
+    if (detailCarouselSyncTimeoutRef.current !== undefined) {
+      window.clearTimeout(detailCarouselSyncTimeoutRef.current);
+      detailCarouselSyncTimeoutRef.current = undefined;
+    }
+  }
+
+  function syncDetailCarouselIndex() {
+    if (suppressDetailCarouselScrollSyncRef.current) {
+      return;
+    }
+
+    const carousel = detailCarouselRef.current;
+    if (!carousel) return;
+
+    const cards = [...carousel.querySelectorAll<HTMLElement>(".test-compare-chart-panel")];
+    if (cards.length === 0) return;
+
+    const carouselCenter = carousel.scrollLeft + carousel.clientWidth / 2;
+    const nearest = cards.reduce(
+      (best, card, index) => {
+        const cardCenter = card.offsetLeft + card.offsetWidth / 2;
+        const distance = Math.abs(cardCenter - carouselCenter);
+        return distance < best.distance ? { index, distance } : best;
+      },
+      { index: 0, distance: Number.POSITIVE_INFINITY }
+    );
+
+    setActiveDetailIndex(nearest.index);
+  }
+
+  function scheduleDetailCarouselSync() {
+    clearPendingDetailCarouselSync();
+    detailCarouselSyncTimeoutRef.current = window.setTimeout(() => {
+      suppressDetailCarouselScrollSyncRef.current = false;
+      detailCarouselSyncTimeoutRef.current = undefined;
+      syncDetailCarouselIndex();
+    }, 420);
+  }
+
+  function scrollToDetailChart(index: number) {
+    const carousel = detailCarouselRef.current;
+    const card = carousel?.querySelectorAll<HTMLElement>(".test-compare-chart-panel")[index];
+    if (!card) return;
+
+    suppressDetailCarouselScrollSyncRef.current = true;
+    setActiveDetailIndex(index);
+    card.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" });
+    scheduleDetailCarouselSync();
+  }
+
+  function scrollDetailCarouselBy(delta: number) {
+    const nextIndex = Math.min(Math.max(activeDetailIndex + delta, 0), selectedTests.length - 1);
+    if (nextIndex === activeDetailIndex) return;
+    scrollToDetailChart(nextIndex);
+  }
+
+  function handleDetailCarouselKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (selectedTests.length <= 1) return;
+
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      scrollDetailCarouselBy(-1);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      scrollDetailCarouselBy(1);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      scrollToDetailChart(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      scrollToDetailChart(selectedTests.length - 1);
+    }
+  }
+
   if (!activePackage) {
     return (
       <div className="empty-page">
@@ -267,6 +358,8 @@ export function TestComparePage() {
   const fitReadyCount = selectedTests.filter(isFitReady).length;
   const tpsValue = parsePositiveInput(tpsInput);
   const cpuValue = parsePositiveInput(cpuInput);
+  const canMoveDetailPrevious = activeDetailIndex > 0;
+  const canMoveDetailNext = activeDetailIndex < selectedTests.length - 1;
 
   const sharedLegend = {
     type: "scroll",
@@ -524,77 +617,128 @@ export function TestComparePage() {
         </div>
       </section>
 
-      <div className="test-compare-detail-grid">
-        {selectedTests.map((test, index) => {
-          const color = palette[index % palette.length];
-          const actualData = test.points.map((point): [number, number, string] => [
-            point.effectiveTps,
-            point.cpuMcpu / 1000,
-            point.runId
-          ]);
-          const fittedData = test.points
-            .filter((point) => point.fitted)
-            .map((point): [number, number, string] => [point.effectiveTps, point.cpuMcpu / 1000, point.runId]);
-          const option = {
-            animation: true,
-            tooltip: sharedTooltip,
-            legend: {
-              top: 0,
-              textStyle: { color: "#3a424b" }
-            },
-            grid: sharedGrid,
-            xAxis: {
-              type: "value",
-              name: "Effective TPS",
-              nameLocation: "middle",
-              nameGap: 28,
-              min: 0
-            },
-            yAxis: {
-              type: "value",
-              name: "CPU",
-              nameGap: 28
-            },
-            series: [
-              {
-                name: "Actual",
-                type: "line",
-                showSymbol: true,
-                symbolSize: 7,
-                color,
-                lineStyle: { width: 2.2 },
-                data: actualData
+      <div
+        className="test-compare-detail-carousel"
+        role="region"
+        aria-label="Per-test CPU charts"
+        aria-keyshortcuts="ArrowLeft ArrowRight Home End"
+        onKeyDown={handleDetailCarouselKeyDown}
+      >
+        <div
+          className="test-compare-detail-grid"
+          ref={detailCarouselRef}
+          tabIndex={0}
+          onScroll={syncDetailCarouselIndex}
+        >
+          {selectedTests.map((test, index) => {
+            const color = palette[index % palette.length];
+            const actualData = test.points.map((point): [number, number, string] => [
+              point.effectiveTps,
+              point.cpuMcpu / 1000,
+              point.runId
+            ]);
+            const fittedData = test.points
+              .filter((point) => point.fitted)
+              .map((point): [number, number, string] => [point.effectiveTps, point.cpuMcpu / 1000, point.runId]);
+            const option = {
+              animation: true,
+              tooltip: sharedTooltip,
+              legend: {
+                top: 0,
+                textStyle: { color: "#3a424b" }
               },
-              {
-                name: "Fit points",
-                type: "scatter",
-                symbol: "emptyCircle",
-                symbolSize: 14,
-                color,
-                itemStyle: {
-                  borderColor: color,
-                  borderWidth: 2.2
+              grid: sharedGrid,
+              xAxis: {
+                type: "value",
+                name: "Effective TPS",
+                nameLocation: "middle",
+                nameGap: 28,
+                min: 0
+              },
+              yAxis: {
+                type: "value",
+                name: "CPU",
+                nameGap: 28
+              },
+              series: [
+                {
+                  name: "Actual",
+                  type: "line",
+                  showSymbol: true,
+                  symbolSize: 7,
+                  color,
+                  lineStyle: { width: 2.2 },
+                  data: actualData
                 },
-                data: fittedData
-              },
-              {
-                name: "Model",
-                type: "line",
-                showSymbol: false,
-                smooth: true,
-                color,
-                lineStyle: { type: "dashed", width: 2.2 },
-                data: makeCurve(test, maxSelectedTps * 1.05)
-              }
-            ]
-          };
+                {
+                  name: "Fit points",
+                  type: "scatter",
+                  symbol: "emptyCircle",
+                  symbolSize: 14,
+                  color,
+                  itemStyle: {
+                    borderColor: color,
+                    borderWidth: 2.2
+                  },
+                  data: fittedData
+                },
+                {
+                  name: "Model",
+                  type: "line",
+                  showSymbol: false,
+                  smooth: true,
+                  color,
+                  lineStyle: { type: "dashed", width: 2.2 },
+                  data: makeCurve(test, maxSelectedTps * 1.05)
+                }
+              ]
+            };
 
-          return (
-            <ChartPanel key={test.testKey} icon={<Cpu size={17} aria-hidden="true" />} title={testLabel(test)}>
-              <EChartsReact option={option} notMerge lazyUpdate style={{ height: 320, width: "100%" }} />
-            </ChartPanel>
-          );
-        })}
+            return (
+              <ChartPanel key={test.testKey} icon={<Cpu size={17} aria-hidden="true" />} title={testLabel(test)}>
+                <EChartsReact option={option} notMerge lazyUpdate style={{ height: 320, width: "100%" }} />
+              </ChartPanel>
+            );
+          })}
+        </div>
+        {selectedTests.length > 1 ? (
+          <div className="test-compare-carousel-controls" aria-label="Per-test chart navigation">
+            <button
+              type="button"
+              className="test-compare-carousel-arrow"
+              aria-label="Previous chart"
+              aria-disabled={!canMoveDetailPrevious}
+              onClick={() => {
+                if (canMoveDetailPrevious) scrollDetailCarouselBy(-1);
+              }}
+            >
+              <ChevronLeft size={16} aria-hidden="true" />
+            </button>
+            <div className="test-compare-carousel-dots">
+              {selectedTests.map((test, index) => (
+                <button
+                  key={test.testKey}
+                  type="button"
+                  className={index === activeDetailIndex ? "selected" : ""}
+                  aria-label={`Show ${testLabel(test)}`}
+                  aria-current={index === activeDetailIndex ? "true" : undefined}
+                  onClick={() => scrollToDetailChart(index)}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              className="test-compare-carousel-arrow"
+              aria-label="Next chart"
+              aria-disabled={!canMoveDetailNext}
+              onClick={() => {
+                if (canMoveDetailNext) scrollDetailCarouselBy(1);
+              }}
+            >
+              <ChevronRight size={16} aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <section className="panel test-compare-calculator-panel">

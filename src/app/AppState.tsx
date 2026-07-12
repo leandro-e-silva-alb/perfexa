@@ -1,15 +1,15 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import type { ImportedPackage, NotesDocument } from "../domain/types";
 import { createStorage, type PerfexaStorage } from "../storage/database";
-
-export type AppView =
-  | "package-import"
-  | "package-library"
-  | "scenario-board"
-  | "run-explorer"
-  | "test-metrics"
-  | "sizing-models"
-  | "test-compare";
+import {
+  packageIdFromPathname,
+  routeForView,
+  testKeysFromSearch,
+  viewFromPathname,
+  withTestKeys,
+  type AppView
+} from "./routes";
 
 interface AppStateValue {
   storageReady: boolean;
@@ -32,15 +32,23 @@ interface AppStateValue {
 const AppStateContext = createContext<AppStateValue | undefined>(undefined);
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [storage, setStorage] = useState<PerfexaStorage>();
   const [packages, setPackages] = useState<ImportedPackage[]>([]);
-  const [activePackageId, setActivePackageId] = useState<string>();
-  const [view, setCurrentView] = useState<AppView>("package-import");
+  const [selectedPackageId, setSelectedPackageId] = useState<string>();
   const [storageReady, setStorageReady] = useState(false);
   const [busyLabel, setBusyLabel] = useState("Starting");
   const [navigationBusy, setNavigationBusy] = useState(false);
   const [operationBusy, setOperationBusy] = useState(true);
-  const [comparisonTestKeys, setComparisonTestKeysState] = useState<string[]>([]);
+  const [pendingComparisonTestKeys, setPendingComparisonTestKeys] = useState<string[]>([]);
+  const comparisonTestKeysRef = useRef<string[]>([]);
+  const initialRoutePackageIdRef = useRef<string | undefined>(packageIdFromPathname(location.pathname));
+
+  const routePackageId = useMemo(() => packageIdFromPathname(location.pathname), [location.pathname]);
+  const activePackageId = routePackageId ?? selectedPackageId;
+  const view = viewFromPathname(location.pathname);
+  const comparisonTestKeys = view === "test-compare" ? testKeysFromSearch(location.search) : pendingComparisonTestKeys;
 
   useEffect(() => {
     let mounted = true;
@@ -51,8 +59,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         const loaded = await nextStorage.listPackages();
         if (!mounted) return;
         setPackages(loaded);
-        setActivePackageId((current) => current ?? loaded[0]?.id);
-        if (loaded.length > 0) setCurrentView("package-library");
+        setSelectedPackageId((current) => current ?? initialRoutePackageIdRef.current ?? loaded[0]?.id);
       })
       .finally(() => {
         if (mounted) {
@@ -66,6 +73,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (routePackageId) {
+      setSelectedPackageId(routePackageId);
+    }
+  }, [routePackageId]);
+
+  useEffect(() => {
+    if (view === "test-compare") {
+      comparisonTestKeysRef.current = comparisonTestKeys;
+    }
+  }, [comparisonTestKeys, view]);
+
   const activePackage = useMemo(
     () => packages.find((pkg) => pkg.id === activePackageId),
     [activePackageId, packages]
@@ -78,7 +97,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     try {
       const loaded = await storage.listPackages();
       setPackages(loaded);
-      setActivePackageId((current) => current ?? loaded[0]?.id);
+      setSelectedPackageId((current) => current ?? loaded[0]?.id);
     } finally {
       setOperationBusy(false);
     }
@@ -95,9 +114,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         throw new Error("The package was saved, but could not be loaded back from storage.");
       }
       setPackages(loaded);
-      setActivePackageId(pkg.id);
-      setComparisonTestKeysState([]);
-      setCurrentView("run-explorer");
+      setSelectedPackageId(pkg.id);
+      setComparisonTestKeys([]);
+      navigate(routeForView("run-explorer", pkg.id));
     } catch (error) {
       console.error("Unable to save imported package.", error);
       throw error;
@@ -114,9 +133,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       await storage.deletePackage(id);
       const loaded = await storage.listPackages();
       setPackages(loaded);
-      setActivePackageId((current) => (current === id ? loaded[0]?.id : current));
+      const nextPackageId = loaded[0]?.id;
+      setSelectedPackageId((current) => (current === id ? nextPackageId : current));
       if (activePackageId === id) {
-        setComparisonTestKeysState([]);
+        setComparisonTestKeys([]);
+        navigate(nextPackageId ? routeForView("run-explorer", nextPackageId) : routeForView("package-import"));
       }
     } catch (error) {
       console.error("Unable to delete imported package.", error);
@@ -143,20 +164,29 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   function setView(view: AppView) {
     setBusyLabel("Loading view");
     setNavigationBusy(true);
-    setCurrentView(view);
+    const nextRoute = routeForView(view, activePackageId);
+    const nextUrl =
+      view === "test-compare" ? withTestKeys(nextRoute, comparisonTestKeysRef.current) : nextRoute;
+    navigate(nextUrl);
     window.setTimeout(() => setNavigationBusy(false), 220);
   }
 
   function setComparisonTestKeys(testKeys: string[]) {
-    setComparisonTestKeysState([...new Set(testKeys)]);
+    const nextKeys = [...new Set(testKeys)];
+    comparisonTestKeysRef.current = nextKeys;
+    setPendingComparisonTestKeys(nextKeys);
+
+    if (view === "test-compare") {
+      navigate(withTestKeys(location.pathname, nextKeys), { replace: true });
+    }
   }
 
   function selectPackage(id: string) {
     setBusyLabel("Opening package");
     setNavigationBusy(true);
-    setActivePackageId(id);
-    setComparisonTestKeysState([]);
-    setCurrentView("run-explorer");
+    setSelectedPackageId(id);
+    setComparisonTestKeys([]);
+    navigate(routeForView("run-explorer", id));
     window.setTimeout(() => setNavigationBusy(false), 220);
   }
 

@@ -48,10 +48,21 @@ function isStringArray(value: unknown): value is string[] {
 
 function hasCurrentMetrics(value: unknown): value is MetricsDocument {
   if (!isRecord(value) || !isRecord(value.metrics)) return false;
+  if (value.favorites !== undefined && (!Array.isArray(value.favorites) || !value.favorites.every(isString))) return false;
+  if (value.groups !== undefined && !isRecord(value.groups)) return false;
+  if (
+    value.groups !== undefined &&
+    !Object.values(value.groups).every(
+      (group) => isRecord(group) && isString(group.name)
+    )
+  ) {
+    return false;
+  }
   return Object.values(value.metrics).every((definition) => {
     if (!isRecord(definition)) return false;
     if (definition.unit !== undefined && !isString(definition.unit)) return false;
     if (definition.description !== undefined && !isString(definition.description)) return false;
+    if (definition.group !== undefined && definition.group !== null && !isString(definition.group)) return false;
     if (definition.topology === undefined) return true;
     return (
       isRecord(definition.topology) &&

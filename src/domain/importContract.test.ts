@@ -258,6 +258,97 @@ run-001,throttling,max,orch-a,0
     });
   });
 
+  it("accepts metric favorites and source groups from metrics YAML", async () => {
+    const result = await validateImportSource(
+      source({
+        ...validFiles,
+        "metrics.yaml": `
+favorites: [latency, cpu]
+groups:
+  oms:
+    name: OMS
+  os:
+    name: OS
+metrics:
+  latency:
+    unit: ms
+    description: Latency.
+    group: oms
+  throughput:
+    unit: tps
+    description: Throughput.
+    group: oms
+  error_rate:
+    unit: percent
+    description: Error rate.
+    group: oms
+  cpu:
+    unit: mCPU
+    description: CPU.
+    group: os
+    topology:
+      aggregation: sum
+  memory:
+    unit: MB
+    description: Memory.
+    group: os
+    topology:
+      aggregation: sum
+  throttling:
+    unit: percent
+    description: Throttling.
+    group: null
+    topology:
+      aggregation: max
+`
+      })
+    );
+
+    expect(result.report.valid).toBe(true);
+    expect(result.package?.metrics.favorites).toEqual(["latency", "cpu"]);
+    expect(result.package?.metrics.groups.os).toEqual({ name: "OS" });
+    expect(result.package?.metrics.metrics.cpu.group).toBe("os");
+    expect(result.package?.metrics.metrics.throttling.group).toBeNull();
+  });
+
+  it("rejects metric favorites and groups that reference unknown ids", async () => {
+    const result = await validateImportSource(
+      source({
+        ...validFiles,
+        "metrics.yaml": `
+favorites: [latency, missing_metric]
+groups:
+  oms:
+    name: OMS
+metrics:
+  latency:
+    unit: ms
+  throughput:
+    unit: tps
+  error_rate:
+    unit: percent
+  cpu:
+    unit: mCPU
+    group: os
+    topology:
+      aggregation: sum
+  memory:
+    unit: MB
+    topology:
+      aggregation: sum
+  throttling:
+    unit: percent
+    topology:
+      aggregation: max
+`
+      })
+    );
+
+    expect(result.report.valid).toBe(false);
+    expect(result.report.errors.some((error) => error.message.includes('favorite "missing_metric"'))).toBe(true);
+    expect(result.report.errors.some((error) => error.message.includes('unknown metric group "os"'))).toBe(true);
+  });
+
   it("accepts valid scenario help with categories and an image", async () => {
     const result = await validateImportSource(
       source({

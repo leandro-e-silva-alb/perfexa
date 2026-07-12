@@ -109,14 +109,26 @@ Key CSV identities:
 Topology is configured in `topology.yaml` using layers and nodes. Metrics are configured in `metrics.yaml`; metrics without a `topology` block are raw metrics, and metrics with a `topology` block can be projected through topology levels.
 
 ```yaml
-cpu:
-  unit: mCPU
-  description: CPU usage.
-  topology:
-    aggregation: sum
-latency:
-  unit: ms
-  description: Request latency.
+favorites:
+  - latency
+  - error_rate
+  - cpu
+groups:
+  oms:
+    name: OMS
+  os:
+    name: OS
+metrics:
+  cpu:
+    unit: mCPU
+    description: CPU usage.
+    group: os
+    topology:
+      aggregation: sum
+  latency:
+    unit: ms
+    description: Request latency.
+    group: oms
 ```
 
 Supported topology aggregation rules are `sum`, `average`, `ratio`, `percentage`, and `max`. Weighted rules use `topology.weight`.

@@ -9,6 +9,8 @@ function currentPackage(): ImportedPackage {
     importedAt: "2026-07-02T12:00:00Z",
     manifest: { schemaVersion: 1, components: {} },
     metrics: {
+      favorites: [],
+      groups: {},
       metrics: {
         cpu: { topology: { aggregation: "sum" }, unit: "mCPU" },
         throttling: { topology: { aggregation: "max" }, unit: "percent" }

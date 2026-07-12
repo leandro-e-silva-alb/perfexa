@@ -22,6 +22,8 @@ const topology: TopologyDocument = {
 };
 
 const metrics: MetricsDocument = {
+  favorites: [],
+  groups: {},
   metrics: {
     wins: { topology: { aggregation: "ratio", weight: "matches" } },
     matches: { topology: { aggregation: "sum" } },
@@ -85,13 +87,13 @@ describe("topology metric resolver", () => {
   });
 
   it("validates metric definitions required for sizing models", () => {
-    expect(validateMetricsDocument({ metrics: { cpu: { topology: { aggregation: "max" } } } })).toContain(
+    expect(validateMetricsDocument({ favorites: [], groups: {}, metrics: { cpu: { topology: { aggregation: "max" } } } })).toContain(
       'metrics.yaml metric "cpu" must use topology aggregation "sum" for sizing model CPU totals.'
     );
-    expect(validateMetricsDocument({ metrics: { cpu: {}, matches: { topology: { aggregation: "sum" } } } })).toContain(
+    expect(validateMetricsDocument({ favorites: [], groups: {}, metrics: { cpu: {}, matches: { topology: { aggregation: "sum" } } } })).toContain(
       'metrics.yaml metric "cpu" must define topology aggregation "sum" for sizing model CPU totals.'
     );
-    expect(validateMetricsDocument({ metrics: { matches: { topology: { aggregation: "sum" } } } })).toContain(
+    expect(validateMetricsDocument({ favorites: [], groups: {}, metrics: { matches: { topology: { aggregation: "sum" } } } })).toContain(
       'metrics.yaml must define required metric "cpu" for sizing models.'
     );
   });
@@ -129,6 +131,8 @@ describe("topology metric resolver", () => {
       nodes: [{ key: "kafka", layer: "group", children: ["kafka-0", "kafka-1"] }]
     };
     const parentOnlyMetrics: MetricsDocument = {
+      favorites: [],
+      groups: {},
       metrics: { cpu: { topology: { aggregation: "sum" } } }
     };
     const projected = resolveTopologyMeasurements(
@@ -173,6 +177,8 @@ describe("topology metric resolver", () => {
 
   it("detects ambiguous max derivation", () => {
     const maxMetrics: MetricsDocument = {
+      favorites: [],
+      groups: {},
       metrics: { cpu: { topology: { aggregation: "sum" } }, peak: { topology: { aggregation: "max" } } }
     };
     const maxMeasurements = [

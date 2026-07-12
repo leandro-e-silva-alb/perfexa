@@ -13,8 +13,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import type { ReactNode } from "react";
-import type { AppView } from "./AppState";
 import { useAppState } from "./AppState";
+import type { AppView } from "./routes";
 
 const navItems: Array<{
   id: AppView;

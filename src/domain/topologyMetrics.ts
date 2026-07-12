@@ -320,7 +320,17 @@ export function validateMetricsDocument(metrics: MetricsDocument): string[] {
     errors.push('metrics.yaml metric "cpu" must use topology aggregation "sum" for sizing model CPU totals.');
   }
 
+  for (const favoriteMetricId of metrics.favorites) {
+    if (!metricIds.has(favoriteMetricId)) {
+      errors.push(`metrics.yaml favorite "${favoriteMetricId}" is not defined in metrics.`);
+    }
+  }
+
   for (const [metricId, definition] of Object.entries(metrics.metrics)) {
+    if (definition.group && !metrics.groups[definition.group]) {
+      errors.push(`Metric "${metricId}" references unknown metric group "${definition.group}".`);
+    }
+
     if (!definition.topology) continue;
 
     const aggregator = getAggregator(definition.topology.aggregation);

@@ -1,57 +1,88 @@
-latency:
-  unit: ms
-  description: Request latency.
-throughput:
-  unit: tps
-  description: Throughput.
-error_rate:
-  unit: percent
-  description: Error rate.
-cpu:
-  unit: mCPU
-  description: CPU usage.
-  topology:
-    aggregation: sum
-memory:
-  unit: MB
-  description: Memory usage.
-  topology:
-    aggregation: sum
-throttling:
-  unit: percent
-  description: CPU throttling.
-  topology:
-    aggregation: max
-cache_hits:
-  unit: percent
-  description: Cache hits.
-io_throughput_read:
-  unit: MBps
-  description: Read IO Throughput.
-  topology:
-    aggregation: sum
-io_throughput_write:
-  unit: MBps
-  description: Write IO Throughput.
-  topology:
-    aggregation: sum
-iops_read:
-  unit: iops
-  description: Read IOPS.
-  topology:
-    aggregation: sum
-iops_write:
-  unit: iops
-  description: Write IOPS.
-  topology:
-    aggregation: sum
-network_receive:
-  unit: Bps
-  description: Receive Network.
-  topology:
-    aggregation: sum
-network_transmit:
-  unit: Bps
-  description: Transmit Network.
-  topology:
-    aggregation: sum
+favorites:
+  - latency
+  - error_rate
+  - cpu
+  - memory
+  - throttling
+groups:
+  zmeter:
+    name: ZMeter
+  oms:
+    name: OMS
+  kafka_exporter:
+    name: Kafka Exporter
+  jmx:
+    name: JMX
+  os:
+    name: OS
+metrics:
+  latency:
+    unit: ms
+    description: Request latency.
+    group: zmeter
+  throughput:
+    unit: tps
+    description: Throughput.
+    group: zmeter
+  error_rate:
+    unit: percent
+    description: Error rate.
+    group: zmeter
+  cpu:
+    unit: mCPU
+    description: CPU usage.
+    group: os
+    topology:
+      aggregation: sum
+  memory:
+    unit: MB
+    description: Memory usage.
+    group: os
+    topology:
+      aggregation: sum
+  throttling:
+    unit: percent
+    description: CPU throttling.
+    group: os
+    topology:
+      aggregation: max
+  cache_hits:
+    unit: percent
+    description: Cache hits.
+    group: oms
+  io_throughput_read:
+    unit: MBps
+    description: Read IO Throughput.
+    group: os
+    topology:
+      aggregation: sum
+  io_throughput_write:
+    unit: MBps
+    description: Write IO Throughput.
+    group: os
+    topology:
+      aggregation: sum
+  iops_read:
+    unit: IOps
+    description: Read IOPS.
+    group: os
+    topology:
+      aggregation: sum
+  iops_write:
+    unit: IOps
+    description: Write IOPS.
+    group: os
+    topology:
+      aggregation: sum
+  network_receive:
+    unit: Bps
+    description: Receive Network.
+    group: os
+    topology:
+      aggregation: sum
+  network_transmit:
+    unit: Bps
+    description: Transmit Network.
+    group: os
+    topology:
+      aggregation: sum

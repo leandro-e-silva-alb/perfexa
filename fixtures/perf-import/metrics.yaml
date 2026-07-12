@@ -1,24 +1,42 @@
-latency:
-  unit: ms
-  description: Request latency.
-throughput:
-  unit: tps
-  description: Throughput.
-error_rate:
-  unit: percent
-  description: Error rate.
-cpu:
-  unit: mCPU
-  description: CPU usage.
-  topology:
-    aggregation: sum
-memory:
-  unit: MB
-  description: Memory usage.
-  topology:
-    aggregation: sum
-throttling:
-  unit: percent
-  description: CPU throttling.
-  topology:
-    aggregation: max
+favorites:
+  - latency
+  - error_rate
+  - cpu
+  - memory
+  - throttling
+groups:
+  oms:
+    name: OMS
+  os:
+    name: OS
+metrics:
+  latency:
+    unit: ms
+    description: Request latency.
+    group: oms
+  throughput:
+    unit: tps
+    description: Throughput.
+    group: oms
+  error_rate:
+    unit: percent
+    description: Error rate.
+    group: oms
+  cpu:
+    unit: mCPU
+    description: CPU usage.
+    group: os
+    topology:
+      aggregation: sum
+  memory:
+    unit: MB
+    description: Memory usage.
+    group: os
+    topology:
+      aggregation: sum
+  throttling:
+    unit: percent
+    description: CPU throttling.
+    group: os
+    topology:
+      aggregation: max

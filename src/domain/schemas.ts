@@ -103,18 +103,31 @@ const metricTopologyDefinitionSchema = z.object({
   weight: optionalText
 });
 
+const metricGroupDefinitionSchema = z.object({
+  name: requiredText
+});
+
 export const metricsDocumentSchema: z.ZodType<MetricsDocument, z.ZodTypeDef, unknown> = z.preprocess(
   (value) => {
     if (value && typeof value === "object" && !Array.isArray(value) && "metrics" in value) {
       return value;
     }
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const { favorites, groups, ...metrics } = value as Record<string, unknown>;
+      if (favorites !== undefined || groups !== undefined) {
+        return { favorites, groups, metrics };
+      }
+    }
     return { metrics: value };
   },
   z.object({
+    favorites: z.array(requiredText).default([]),
+    groups: z.record(metricGroupDefinitionSchema).default({}),
     metrics: z.record(
       z.object({
         unit: optionalText,
         description: optionalText,
+        group: optionalText.nullable(),
         topology: metricTopologyDefinitionSchema.optional()
       })
     )

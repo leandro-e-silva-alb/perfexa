@@ -66,13 +66,20 @@ export interface MetricTopologyDefinition {
   weight?: MetricId;
 }
 
+export interface MetricGroupDefinition {
+  name: string;
+}
+
 export interface MetricDefinition {
   unit?: string;
   description?: string;
+  group?: string | null;
   topology?: MetricTopologyDefinition;
 }
 
 export interface MetricsDocument {
+  favorites: MetricId[];
+  groups: Record<string, MetricGroupDefinition>;
   metrics: Record<MetricId, MetricDefinition>;
 }
 
